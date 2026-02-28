@@ -72,6 +72,7 @@ async function init() {
     
   const initGit = (await question('\n👉 Initialize a git repository? [Y/n] ')).toLowerCase() !== 'n';
   const initDocker = (await question('👉 Include Dockerfile & docker-compose.yml? [Y/n] ')).toLowerCase() !== 'n';
+  const initAuth = (await question('👉 Include basic JWT Auth boilerplate? [Y/n] ')).toLowerCase() !== 'n';
 
   rl.close();
 
@@ -122,6 +123,32 @@ async function init() {
     if (fs.existsSync(dockerComposePath) && deps.mongoose) {
       fs.copyFileSync(dockerComposePath, path.join(projectPath, 'docker-compose.yml'));
     }
+  }
+
+  if (initAuth) {
+    console.log(`🔐 Adding Auth templates...`);
+    // Need to ensure directories exist
+    fs.mkdirSync(path.join(projectPath, 'src', 'controllers'), { recursive: true });
+    fs.mkdirSync(path.join(projectPath, 'src', 'middlewares'), { recursive: true });
+    fs.mkdirSync(path.join(projectPath, 'src', 'routes'), { recursive: true });
+    
+    // Copy the templates
+    fs.copyFileSync(
+      path.join(__dirname, '..', 'templates', 'auth', 'auth.controller.js'),
+      path.join(projectPath, 'src', 'controllers', 'auth.controller.js')
+    );
+    fs.copyFileSync(
+      path.join(__dirname, '..', 'templates', 'auth', 'auth.middleware.js'),
+      path.join(projectPath, 'src', 'middlewares', 'auth.middleware.js')
+    );
+    fs.copyFileSync(
+      path.join(__dirname, '..', 'templates', 'auth', 'auth.routes.js'),
+      path.join(projectPath, 'src', 'routes', 'auth.routes.js')
+    );
+    
+    // Append JWT secret to env example
+    fs.appendFileSync(path.join(projectPath, '.env.example'), '\nJWT_SECRET=supersecretjwtkey123\n');
+    fs.appendFileSync(path.join(projectPath, '.env'), '\nJWT_SECRET=supersecretjwtkey123\n');
   }
 
   // 3. Create package.json
