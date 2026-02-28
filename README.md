@@ -14,14 +14,16 @@ You do not need to clone this repository, install dependencies manually, or writ
 
 ### 1. Initialize a New Project
 
+We highly recommend using the `@latest` tag to ensure you are always downloading the most recent version of our CLI tool dynamically, bypassing any local caching issues!
+
 Run the following command anywhere in your terminal:
 ```bash
-npx create-express-kickstart <your-project-name>
+npx create-express-kickstart@latest <your-project-name>
 ```
 
 **Example:**
 ```bash
-npx create-express-kickstart my-awesome-api
+npx create-express-kickstart@latest my-awesome-api
 ```
 
 ### 2. What happens under the hood?
