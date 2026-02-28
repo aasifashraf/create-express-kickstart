@@ -266,7 +266,6 @@ async function init() {
   if (initAuth) {
     dependenciesToInstall.push('jsonwebtoken', 'bcryptjs'); // Add bcryptjs too since it's standard with JWT
   }
-  const depString = dependenciesToInstall.join(' ');
   
   const devDependenciesToInstall = ['nodemon'];
   if (deps.prettier) devDependenciesToInstall.push('prettier');
@@ -274,32 +273,30 @@ async function init() {
   if (initTests) {
     devDependenciesToInstall.push('jest', 'supertest');
   }
-  const devDepString = devDependenciesToInstall.join(' ');
 
-  console.log(`\n⏳ Installing selected core dependencies (${dependenciesToInstall.join(', ')}). This might take a minute...`);
   try {
-    let installCmd = packageManager === 'yarn' ? 'yarn add' 
-      : packageManager === 'pnpm' ? 'pnpm add'
-      : packageManager === 'bun' ? 'bun add'
-      : 'npm install';
-      
-    let installDevCmd = packageManager === 'yarn' ? 'yarn add -D' 
-      : packageManager === 'pnpm' ? 'pnpm add -D'
-      : packageManager === 'bun' ? 'bun add -d'
-      : 'npm install --save-dev';
-
-    if (depString) {
-      execSync(`${installCmd} ${depString}`, { 
-        cwd: projectPath, 
-        stdio: 'inherit' 
-      });
-    }
+    const execConfig = { cwd: projectPath, stdio: 'inherit' };
     
-    console.log(`\n⏳ Installing latest dev dependencies (${devDepString})...`);
-    execSync(`${installDevCmd} ${devDepString}`, { 
-      cwd: projectPath, 
-      stdio: 'inherit' 
-    });
+    // Inject dependencies directly into package.json instead of doing them via raw arguments.
+    // This perfectly bypasses PNPM / YARN / BUN specific registry caching bugs when downloading deeply nested trees.
+    console.log(`\n⏳ Configuring ${packageManager} and resolving dependency trees...`);
+    const finalPackageJsonPath = path.join(projectPath, 'package.json');
+    const finalPackageJsonCode = JSON.parse(fs.readFileSync(finalPackageJsonPath, 'utf8'));
+    
+    // We add them dynamically so package managers can evaluate them holistically at once
+    const latestDeps = {};
+    dependenciesToInstall.forEach(d => latestDeps[d] = 'latest');
+    finalPackageJsonCode.dependencies = latestDeps;
+
+    const latestDevDeps = {};
+    devDependenciesToInstall.forEach(d => latestDevDeps[d] = 'latest');
+    finalPackageJsonCode.devDependencies = latestDevDeps;
+    
+    fs.writeFileSync(finalPackageJsonPath, JSON.stringify(finalPackageJsonCode, null, 2));
+
+    console.log(`\n⏳ Running final installation via ${packageManager} (This might take a minute)...`);
+    const installTriggerCmd = packageManager === 'npm' ? 'npm install' : `${packageManager} install`;
+    execSync(installTriggerCmd, execConfig);
 
     if (initGit) {
       console.log(`\n🌱 Initializing Git repository...`);
