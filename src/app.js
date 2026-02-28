@@ -4,7 +4,10 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
 import rateLimit from "express-rate-limit";
+import { createRequire } from "module";
 import { errorHandler } from "#middlewares/errorHandler.middleware.js";
+
+const _require = createRequire(import.meta.url);
 
 // Import routers
 import healthcheckRouter from "#routes/healthcheck.routes.js";
@@ -36,10 +39,10 @@ app.use(pinoHttp({
         }
         return 'info'
     },
-    // Dynamically require pino-pretty if in dev and it exists, else undefined
+    // Dynamically check if pino-pretty is available, else undefined
     transport: process.env.NODE_ENV === "development" ? (function() {
         try {
-            import("pino-pretty");
+            _require.resolve('pino-pretty');
             return {
                 target: 'pino-pretty',
                 options: { colorize: true }

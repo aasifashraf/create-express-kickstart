@@ -16,3 +16,7 @@ const exampleSchema = new mongoose.Schema({
         unique: true,
     },
 });
+
+const Example = mongoose.model("Example", exampleSchema);
+
+export { Example };

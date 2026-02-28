@@ -1,12 +1,12 @@
 import dotenv from "dotenv";
-import { app } from "#app.js";
 
-// Load environment variables from .env file
+// Load environment variables BEFORE importing modules that depend on them
 dotenv.config({
     path: './.env'
 });
 
-import connectDB from "#db/index.js";
+const { app } = await import("#app.js");
+const { default: connectDB } = await import("#db/index.js");
 
 const PORT = process.env.PORT || 8000;
 

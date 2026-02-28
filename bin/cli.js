@@ -16,6 +16,160 @@ const rl = readline.createInterface({
 
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
 
+function generateAppContent(deps, installPinoPretty) {
+  const lines = [];
+
+  lines.push('import express from "express";');
+  if (deps.cors)              lines.push('import cors from "cors";');
+  if (deps['cookie-parser'])  lines.push('import cookieParser from "cookie-parser";');
+  if (deps.helmet)            lines.push('import helmet from "helmet";');
+  if (deps['pino-http']) {
+    lines.push('import pinoHttp from "pino-http";');
+    if (installPinoPretty)    lines.push('import { createRequire } from "module";');
+  }
+  if (deps['express-rate-limit']) lines.push('import rateLimit from "express-rate-limit";');
+  lines.push('import { errorHandler } from "#middlewares/errorHandler.middleware.js";');
+  lines.push('');
+  lines.push('// Import routers');
+  lines.push('import healthcheckRouter from "#routes/healthcheck.routes.js";');
+  lines.push('');
+
+  if (deps['pino-http'] && installPinoPretty) {
+    lines.push('const _require = createRequire(import.meta.url);');
+    lines.push('');
+  }
+
+  lines.push('const app = express();');
+  lines.push('');
+
+  if (deps.helmet) {
+    lines.push('// Security HTTP headers');
+    lines.push('app.use(helmet());');
+    lines.push('');
+  }
+
+  if (deps['express-rate-limit']) {
+    lines.push('// Rate Limiting');
+    lines.push('const limiter = rateLimit({');
+    lines.push('    windowMs: process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000, // Default 15 minutes');
+    lines.push('    limit: process.env.RATE_LIMIT_MAX || 100,');
+    lines.push("    standardHeaders: 'draft-7',");
+    lines.push('    legacyHeaders: false,');
+    lines.push('    message: "Too many requests from this IP, please try again later"');
+    lines.push('});');
+    lines.push('app.use("/api", limiter); // Apply rate limiting to all API routes');
+    lines.push('');
+  }
+
+  if (deps['pino-http']) {
+    lines.push('// Logging');
+    lines.push('app.use(pinoHttp({');
+    lines.push('    customLogLevel: function (req, res, err) {');
+    lines.push('        if (res.statusCode >= 400 && res.statusCode < 500) {');
+    lines.push("            return 'warn'");
+    lines.push('        } else if (res.statusCode >= 500 || err) {');
+    lines.push("            return 'error'");
+    lines.push('        } else if (res.statusCode >= 300 && res.statusCode < 400) {');
+    lines.push("            return 'silent'");
+    lines.push('        }');
+    lines.push("        return 'info'");
+    lines.push('    },');
+    if (installPinoPretty) {
+      lines.push('    transport: process.env.NODE_ENV === "development" ? (function() {');
+      lines.push('        try {');
+      lines.push("            _require.resolve('pino-pretty');");
+      lines.push('            return {');
+      lines.push("                target: 'pino-pretty',");
+      lines.push('                options: { colorize: true }');
+      lines.push('            };');
+      lines.push('        } catch (e) {');
+      lines.push('            return undefined;');
+      lines.push('        }');
+      lines.push('    })() : undefined');
+    }
+    lines.push('}));');
+    lines.push('');
+  }
+
+  if (deps.cors) {
+    lines.push('// CORS setup');
+    lines.push('app.use(');
+    lines.push('    cors({');
+    lines.push('        origin: process.env.CORS_ORIGIN || "*", // Fallback to allowing everything');
+    lines.push('        credentials: true, // Allow cookies with requests');
+    lines.push('    })');
+    lines.push(');');
+    lines.push('');
+  }
+
+  lines.push('// Payload sizes and forms');
+  lines.push('app.use(express.json({ limit: "16kb" }));');
+  lines.push('app.use(express.urlencoded({ extended: true, limit: "16kb" }));');
+  lines.push('app.use(express.static("public"));');
+  if (deps['cookie-parser']) {
+    lines.push('app.use(cookieParser());');
+  }
+  lines.push('');
+  lines.push('// -------- API ROUTES ---------');
+  lines.push('// Mount routers');
+  lines.push('app.use("/api/v1/healthcheck", healthcheckRouter);');
+  lines.push('');
+  lines.push('// Global Error Handler');
+  lines.push('// Always add this as the very last middleware');
+  lines.push('app.use(errorHandler);');
+  lines.push('');
+  lines.push('export { app };');
+
+  return lines.join('\n');
+}
+
+function generateServerContent(deps) {
+  const lines = [];
+
+  if (deps.dotenv) {
+    lines.push('import dotenv from "dotenv";');
+    lines.push('');
+    lines.push('// Load environment variables BEFORE importing modules that depend on them');
+    lines.push("dotenv.config({ path: './.env' });");
+    lines.push('');
+  }
+
+  lines.push('const { app } = await import("#app.js");');
+
+  if (deps.mongoose) {
+    lines.push('const { default: connectDB } = await import("#db/index.js");');
+  }
+
+  lines.push('');
+  lines.push('const PORT = process.env.PORT || 8000;');
+  lines.push('');
+
+  if (deps.mongoose) {
+    lines.push('connectDB()');
+    lines.push('    .then(() => {');
+    lines.push('        app.listen(PORT, () => {');
+    lines.push('            console.log(`Server is running at port : ${PORT}`);');
+    lines.push('        });');
+    lines.push('    })');
+    lines.push('    .catch((err) => {');
+    lines.push('        console.log("MONGO db connection failed !!! ", err);');
+    lines.push('    });');
+  } else {
+    lines.push('app.listen(PORT, () => {');
+    lines.push('    console.log(`Server is running at port : ${PORT}`);');
+    lines.push('});');
+  }
+
+  lines.push('');
+  lines.push('process.on("unhandledRejection", (err) => {');
+  lines.push('    console.log("UNHANDLED REJECTION! Shutting down...");');
+  lines.push('    console.log(err.name, err.message);');
+  lines.push('    process.exit(1);');
+  lines.push('});');
+
+  return lines.join('\n');
+}
+
 async function init() {
   const projectNameArg = process.argv[2];
   
@@ -95,6 +249,16 @@ async function init() {
 
   console.log(`📂 Bootstrapping application structure (errorHandler, ApiResponse, async handlers)...`);
   copyRecursiveSync(sourceDir, targetSrcDir);
+
+  // Generate app.js and server.js tailored to the selected dependencies
+  fs.writeFileSync(path.join(targetSrcDir, 'app.js'), generateAppContent(deps, installPinoPretty));
+  fs.writeFileSync(path.join(targetSrcDir, 'server.js'), generateServerContent(deps));
+
+  // If mongoose was not selected, remove the db and models directories
+  if (!deps.mongoose) {
+    fs.rmSync(path.join(targetSrcDir, 'db'), { recursive: true, force: true });
+    fs.rmSync(path.join(targetSrcDir, 'models'), { recursive: true, force: true });
+  }
 
   // 2. Copy .env.example
   console.log(`🔧 Generating environment files...`);
