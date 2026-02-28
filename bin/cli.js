@@ -73,6 +73,7 @@ async function init() {
   const initGit = (await question('\n👉 Initialize a git repository? [Y/n] ')).toLowerCase() !== 'n';
   const initDocker = (await question('👉 Include Dockerfile & docker-compose.yml? [Y/n] ')).toLowerCase() !== 'n';
   const initAuth = (await question('👉 Include basic JWT Auth boilerplate? [Y/n] ')).toLowerCase() !== 'n';
+  const useESM = (await question('👉 Use ECMAScript Modules (ESM) over CommonJS? [Y/n] ')).toLowerCase() !== 'n';
 
   rl.close();
 
@@ -158,7 +159,7 @@ async function init() {
     version: "1.0.0",
     description: description || "A production-ready Node.js Express API",
     main: "src/server.js",
-    type: "module",
+    type: useESM ? "module" : "commonjs",
     scripts: {
       "start": "node src/server.js",
       "dev": "nodemon src/server.js"
