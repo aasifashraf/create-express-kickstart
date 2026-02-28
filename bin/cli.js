@@ -71,6 +71,7 @@ async function init() {
     : 'npm';
     
   const initGit = (await question('\n👉 Initialize a git repository? [Y/n] ')).toLowerCase() !== 'n';
+  const initDocker = (await question('👉 Include Dockerfile & docker-compose.yml? [Y/n] ')).toLowerCase() !== 'n';
 
   rl.close();
 
@@ -109,6 +110,18 @@ async function init() {
   if (fs.existsSync(envExamplePath)) {
     fs.copyFileSync(envExamplePath, path.join(projectPath, '.env.example'));
     fs.copyFileSync(envExamplePath, path.join(projectPath, '.env')); 
+  }
+
+  if (initDocker) {
+    console.log(`🐳 Adding Docker files...`);
+    const dockerfilePath = path.join(__dirname, '..', 'templates', 'Dockerfile');
+    const dockerComposePath = path.join(__dirname, '..', 'templates', 'docker-compose.yml');
+    
+    // Fallbacks if templates aren't bundled right
+    if (fs.existsSync(dockerfilePath)) fs.copyFileSync(dockerfilePath, path.join(projectPath, 'Dockerfile'));
+    if (fs.existsSync(dockerComposePath) && deps.mongoose) {
+      fs.copyFileSync(dockerComposePath, path.join(projectPath, 'docker-compose.yml'));
+    }
   }
 
   // 3. Create package.json
