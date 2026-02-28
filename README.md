@@ -47,7 +47,7 @@ npm run dev
 - **No Try-Catch Hell**: `asyncHandler` wrapper to effortlessly catch unhandled promise rejections.
 - **Security First**: Pre-configured with `helmet`, `cors`, and `express-rate-limit`.
 - **Database Ready**: Built-in support and structural setup for MongoDB with `mongoose`.
-- **Developer Experience**: Hot reloading with `nodemon` and request logging with `morgan`.
+- **Developer Experience**: Hot reloading with `nodemon` and request logging with `pino`.
 - **Path Aliasing Native**: Pre-configured subpath imports (`#utils/...`).
 
 ---
