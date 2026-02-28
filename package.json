@@ -18,8 +18,15 @@
     "template",
     "boilerplate"
   ],
-  "author": "Your Name",
+  "author": "aasifashraf",
   "license": "ISC",
   "type": "module",
-  "dependencies": {}
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aasifashraf/create-express-kickstart.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aasifashraf/create-express-kickstart/issues"
+  },
+  "homepage": "https://github.com/aasifashraf/create-express-kickstart#readme"
 }

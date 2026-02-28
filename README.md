@@ -82,3 +82,10 @@ const restrictedRoute = asyncHandler(async (req, res) => {
 
 ### `asyncHandler`
 A wrapper for your async route handlers that eliminates the need for repetitive `try-catch` blocks.
+## 🤝 Contributing & Repository
+
+Love this tool? Want to add a feature or fix a bug?
+Feel free to open an issue or submit a pull request on our GitHub Repository!
+
+🔗 **GitHub Repository:** [https://github.com/aasifashraf/create-express-kickstart](https://github.com/aasifashraf/create-express-kickstart)
+
