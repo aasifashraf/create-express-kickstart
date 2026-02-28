@@ -7,6 +7,6 @@ describe('Healthcheck API', () => {
     
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
-    expect(response.body.message).toBe('Api is runing properly');
+    expect(response.body.message).toBe('App is running smoothly');
   });
 });

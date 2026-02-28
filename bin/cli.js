@@ -73,7 +73,6 @@ async function init() {
   const initGit = (await question('\n👉 Initialize a git repository? [Y/n] ')).toLowerCase() !== 'n';
   const initDocker = (await question('👉 Include Dockerfile & docker-compose.yml? [Y/n] ')).toLowerCase() !== 'n';
   const initAuth = (await question('👉 Include basic JWT Auth boilerplate? [Y/n] ')).toLowerCase() !== 'n';
-  const useESM = (await question('👉 Use ECMAScript Modules (ESM) over CommonJS? [Y/n] ')).toLowerCase() !== 'n';
   const initTests = (await question('👉 Include Jest setup and boilerplate tests? [Y/n] ')).toLowerCase() !== 'n';
 
   rl.close();
@@ -162,6 +161,69 @@ async function init() {
     );
   }
 
+  // Rewrite app.js and server.js based on selections
+  let appJsPath = path.join(projectPath, 'src', 'app.js');
+  if (fs.existsSync(appJsPath)) {
+    let appJsCode = fs.readFileSync(appJsPath, 'utf8');
+
+    if (initAuth) {
+      appJsCode = appJsCode.replace(
+        '// Import routers',
+        '// Import routers\nimport authRouter from "#routes/auth.routes.js";'
+      );
+      appJsCode = appJsCode.replace(
+        '// Mount routers',
+        '// Mount routers\napp.use("/api/v1/auth", authRouter);'
+      );
+    }
+    if (!deps.cors) {
+      appJsCode = appJsCode.replace(/import cors from "cors";\r?\n/, '');
+      appJsCode = appJsCode.replace(/\/\/ CORS setup[\s\S]*?\n\);\r?\n/, '');
+    }
+    if (!deps.helmet) {
+      appJsCode = appJsCode.replace(/import helmet from "helmet";\r?\n/, '');
+      appJsCode = appJsCode.replace(/\/\/ Security HTTP headers\r?\napp\.use\(helmet\(\)\);\r?\n/, '');
+    }
+    if (!deps['cookie-parser']) {
+      appJsCode = appJsCode.replace(/import cookieParser from "cookie-parser";\r?\n/, '');
+      appJsCode = appJsCode.replace(/app\.use\(cookieParser\(\)\);\r?\n/, '');
+    }
+    if (!deps['pino-http']) {
+      appJsCode = appJsCode.replace(/import pinoHttp from "pino-http";\r?\n/, '');
+      appJsCode = appJsCode.replace(/\/\/ Logging[\s\S]*?\}\)\(\) \? : undefined\n\}\)\);\r?\n/g, ''); // Fallback block 
+      appJsCode = appJsCode.replace(/\/\/ Logging[\s\S]*?\}\)\(\) : undefined\r?\n\}\)\);\r?\n/g, '');
+    }
+    if (!deps['express-rate-limit']) {
+      appJsCode = appJsCode.replace(/import rateLimit from "express-rate-limit";\r?\n/, '');
+      appJsCode = appJsCode.replace(/\/\/ Rate Limiting[\s\S]*?app\.use\("\/api", limiter\);[^\n]*\n/g, '');
+    }
+
+    fs.writeFileSync(appJsPath, appJsCode);
+  }
+
+  let serverJsPath = path.join(projectPath, 'src', 'server.js');
+  if (fs.existsSync(serverJsPath)) {
+    let serverJsCode = fs.readFileSync(serverJsPath, 'utf8');
+    
+    if (!deps.mongoose) {
+      serverJsCode = serverJsCode.replace(/import connectDB from "#db\/index\.js";\r?\n/, '');
+      serverJsCode = serverJsCode.replace(/connectDB\(\)\r?\n    \.then\(\(\) => \{\r?\n/, '');
+      serverJsCode = serverJsCode.replace(/    \}\)\r?\n    \.catch\(\(err\) => \{\r?\n        console\.log\("MONGO db connection failed !!! ", err\);\r?\n    \}\);\r?\n/, '');
+      // Fix indentation for app.listen
+      serverJsCode = serverJsCode.replace(/        app\.listen\(PORT, \(\) => \{\r?\n            console\.log\(`Server is running at port : \$\{PORT\}`\);\r?\n        \}\);\r?\n/, 'app.listen(PORT, () => {\n    console.log(`Server is running at port : ${PORT}`);\n});\n');
+      
+      const dbDir = path.join(projectPath, 'src', 'db');
+      if (fs.existsSync(dbDir)) fs.rmSync(dbDir, { recursive: true, force: true });
+    }
+
+    if (!deps.dotenv) {
+      serverJsCode = serverJsCode.replace(/import dotenv from "dotenv";\r?\n/, '');
+      serverJsCode = serverJsCode.replace(/\/\/ Load environment variables[\s\S]*?\}\);\r?\n/, '');
+    }
+
+    fs.writeFileSync(serverJsPath, serverJsCode);
+  }
+
   // 3. Create package.json
   console.log(`📦 Setting up package.json...`);
   const packageJsonTemplate = {
@@ -169,7 +231,7 @@ async function init() {
     version: "1.0.0",
     description: description || "A production-ready Node.js Express API",
     main: "src/server.js",
-    type: useESM ? "module" : "commonjs",
+    type: "module",
     scripts: {
       "start": "node src/server.js",
       "dev": "nodemon src/server.js"
@@ -187,9 +249,7 @@ async function init() {
   }
 
   if (initTests) {
-    packageJsonTemplate.scripts.test = useESM 
-      ? "node --experimental-vm-modules node_modules/jest/bin/jest.js"
-      : "jest";
+    packageJsonTemplate.scripts.test = "node --experimental-vm-modules node_modules/jest/bin/jest.js";
   }
 
   // Write package.json
