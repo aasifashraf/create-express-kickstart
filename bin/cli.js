@@ -74,6 +74,7 @@ async function init() {
   const initDocker = (await question('👉 Include Dockerfile & docker-compose.yml? [Y/n] ')).toLowerCase() !== 'n';
   const initAuth = (await question('👉 Include basic JWT Auth boilerplate? [Y/n] ')).toLowerCase() !== 'n';
   const useESM = (await question('👉 Use ECMAScript Modules (ESM) over CommonJS? [Y/n] ')).toLowerCase() !== 'n';
+  const initTests = (await question('👉 Include Jest setup and boilerplate tests? [Y/n] ')).toLowerCase() !== 'n';
 
   rl.close();
 
@@ -152,6 +153,15 @@ async function init() {
     fs.appendFileSync(path.join(projectPath, '.env'), '\nJWT_SECRET=supersecretjwtkey123\n');
   }
 
+  if (initTests) {
+    console.log(`🧪 Adding Jest test templates...`);
+    fs.mkdirSync(path.join(projectPath, 'tests'), { recursive: true });
+    fs.copyFileSync(
+      path.join(__dirname, '..', 'templates', 'tests', 'healthcheck.test.js'),
+      path.join(projectPath, 'tests', 'healthcheck.test.js')
+    );
+  }
+
   // 3. Create package.json
   console.log(`📦 Setting up package.json...`);
   const packageJsonTemplate = {
@@ -176,6 +186,12 @@ async function init() {
     packageJsonTemplate.scripts.format = "prettier --write \"src/**/*.{js,json}\"";
   }
 
+  if (initTests) {
+    packageJsonTemplate.scripts.test = useESM 
+      ? "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+      : "jest";
+  }
+
   // Write package.json
   fs.writeFileSync(
     path.join(projectPath, 'package.json'), 
@@ -192,6 +208,9 @@ async function init() {
   const devDependenciesToInstall = ['nodemon'];
   if (deps.prettier) devDependenciesToInstall.push('prettier');
   if (installPinoPretty) devDependenciesToInstall.push('pino-pretty');
+  if (initTests) {
+    devDependenciesToInstall.push('jest', 'supertest');
+  }
   const devDepString = devDependenciesToInstall.join(' ');
 
   console.log(`\n⏳ Installing selected core dependencies (${dependenciesToInstall.join(', ')}). This might take a minute...`);
