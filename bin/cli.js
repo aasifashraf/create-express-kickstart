@@ -21,11 +21,11 @@ async function init() {
   
   let projectName = projectNameArg;
   if (!projectName) {
-    projectName = await question('\n👉 Project name (e.g. my-awesome-api): ');
+    projectName = await question('\n👉 Project Directory Name (e.g. my-awesome-api): ');
   }
   
   if (!projectName) {
-    console.error('\n❌ Error: Project name is required.');
+    console.error('\n❌ Error: Project Directory Name is required.');
     process.exit(1);
   }
 
@@ -33,8 +33,13 @@ async function init() {
   const projectPath = path.join(currentPath, projectName);
 
   if (fs.existsSync(projectPath)) {
-    console.error(`\n❌ Error: Folder ${projectName} already exists. Please choose a different name.\n`);
+    console.error(`\n❌ Error: Folder ${projectName} already exists. Please choose a different directory name.\n`);
     process.exit(1);
+  }
+
+  let packageJsonName = await question(`👉 package.json name (${projectName}): `);
+  if (!packageJsonName.trim()) {
+    packageJsonName = projectName; // Fallback to directory name
   }
 
   const description = await question('👉 Project description: ');
@@ -102,7 +107,7 @@ async function init() {
   // 3. Create package.json
   console.log(`📦 Setting up package.json...`);
   const packageJsonTemplate = {
-    name: projectName,
+    name: packageJsonName.trim(),
     version: "1.0.0",
     description: description || "A production-ready Node.js Express API",
     main: "src/server.js",
