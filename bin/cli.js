@@ -65,6 +65,13 @@ async function init() {
     installPinoPretty = (await question('Include pino-pretty for clean development logs? [Y/n] ')).toLowerCase() !== 'n';
   }
 
+  const packageManagerChoice = await question('\n👉 Which package manager would you like to use? [npm/yarn/pnpm/bun] (default: npm): ');
+  const packageManager = ['yarn', 'pnpm', 'bun'].includes(packageManagerChoice.trim().toLowerCase()) 
+    ? packageManagerChoice.trim().toLowerCase() 
+    : 'npm';
+    
+  const initGit = (await question('\n👉 Initialize a git repository? [Y/n] ')).toLowerCase() !== 'n';
+
   rl.close();
 
   console.log(`\n🚀 Creating a new Node.js Express API in ${projectPath}...`);
@@ -128,13 +135,13 @@ async function init() {
     packageJsonTemplate.scripts.format = "prettier --write \"src/**/*.{js,json}\"";
   }
 
-  // Remove the readline dependency from the generated boilerplate if mistakenly mixed
+  // Write package.json
   fs.writeFileSync(
     path.join(projectPath, 'package.json'), 
     JSON.stringify(packageJsonTemplate, null, 2)
   );
 
-  // 4. Install Dependencies
+  // Install Dependencies
   const dependenciesToInstall = Object.keys(deps).filter(dep => deps[dep] && dep !== 'prettier');
   if (deps['pino-http']) {
     dependenciesToInstall.push('pino');
@@ -148,30 +155,50 @@ async function init() {
 
   console.log(`\n⏳ Installing selected core dependencies (${dependenciesToInstall.join(', ')}). This might take a minute...`);
   try {
+    let installCmd = packageManager === 'yarn' ? 'yarn add' 
+      : packageManager === 'pnpm' ? 'pnpm add'
+      : packageManager === 'bun' ? 'bun add'
+      : 'npm install';
+      
+    let installDevCmd = packageManager === 'yarn' ? 'yarn add -D' 
+      : packageManager === 'pnpm' ? 'pnpm add -D'
+      : packageManager === 'bun' ? 'bun add -d'
+      : 'npm install --save-dev';
+
     if (depString) {
-      execSync(`npm install ${depString}`, { 
+      execSync(`${installCmd} ${depString}`, { 
         cwd: projectPath, 
         stdio: 'inherit' 
       });
     }
     
     console.log(`\n⏳ Installing latest dev dependencies (${devDepString})...`);
-    execSync(`npm install ${devDepString} --save-dev`, { 
+    execSync(`${installDevCmd} ${devDepString}`, { 
       cwd: projectPath, 
       stdio: 'inherit' 
     });
 
+    if (initGit) {
+      console.log(`\n🌱 Initializing Git repository...`);
+      execSync('git init', { cwd: projectPath, stdio: 'inherit' });
+      // Create .gitignore
+      const gitignoreContent = "node_modules\n.env\ndist\nbuild\ncoverage\n";
+      fs.writeFileSync(path.join(projectPath, '.gitignore'), gitignoreContent);
+      execSync('git add .', { cwd: projectPath, stdio: 'inherit' });
+      execSync('git commit -m "initial commit"', { cwd: projectPath, stdio: 'inherit' });
+    }
+
     console.log(`\n✅ Success! Created "${projectName}" at ${projectPath}`);
     console.log('\nInside that directory, you can run several commands:');
-    console.log('\n  npm run dev');
+    console.log(`\n  ${packageManager === 'npm' ? 'npm run' : packageManager} dev`);
     console.log('    Starts the development server on localhost.');
-    console.log('\n  npm start');
+    console.log(`\n  ${packageManager === 'npm' ? 'npm' : packageManager} start`);
     console.log('    Starts the production server.');
     console.log('\nWe suggest that you begin by typing:');
     console.log(`\n  cd ${projectName}`);
-    console.log('  npm run dev\n');
+    console.log(`  ${packageManager === 'npm' ? 'npm run' : packageManager} dev\n`);
   } catch (err) {
-    console.error('\n❌ Failed to install dependencies. You may need to run npm install manually inside the folder.', err);
+    console.error('\n❌ Failed to install dependencies. You may need to install them manually inside the folder.', err);
   }
 }
 
