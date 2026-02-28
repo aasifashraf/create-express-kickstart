@@ -203,6 +203,9 @@ async function init() {
   if (deps['pino-http']) {
     dependenciesToInstall.push('pino');
   }
+  if (initAuth) {
+    dependenciesToInstall.push('jsonwebtoken', 'bcryptjs'); // Add bcryptjs too since it's standard with JWT
+  }
   const depString = dependenciesToInstall.join(' ');
   
   const devDependenciesToInstall = ['nodemon'];
