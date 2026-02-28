@@ -56,9 +56,16 @@ async function init() {
     'cookie-parser': (await question('Include cookie-parser? [Y/n] ')).toLowerCase() !== 'n',
     'pino-http': (await question('Include Pino (HTTP Logger)? [Y/n] ')).toLowerCase() !== 'n',
     'express-rate-limit': (await question('Include Rate Limiting? [Y/n] ')).toLowerCase() !== 'n',
+    compression: (await question('Include Compression (gzip responses)? [Y/n] ')).toLowerCase() !== 'n',
+    hpp: (await question('Include HPP (HTTP Parameter Pollution protection)? [Y/n] ')).toLowerCase() !== 'n',
     dotenv: (await question('Include dotenv (Environment variables)? [Y/n] ')).toLowerCase() !== 'n',
     prettier: (await question('Include Prettier (Code formatter)? [Y/n] ')).toLowerCase() !== 'n'
   };
+
+  // Always include express-mongo-sanitize when Mongoose is selected
+  if (deps.mongoose) {
+    deps['express-mongo-sanitize'] = true;
+  }
 
   let installPinoPretty = false;
   if (deps['pino-http']) {
@@ -159,6 +166,9 @@ async function init() {
       path.join(__dirname, '..', 'templates', 'tests', 'healthcheck.test.js'),
       path.join(projectPath, 'tests', 'healthcheck.test.js')
     );
+    // Generate jest.config.js for ESM support
+    const jestConfig = `export default {\n    testEnvironment: 'node',\n    transform: {},\n};\n`;
+    fs.writeFileSync(path.join(projectPath, 'jest.config.js'), jestConfig);
   }
 
   // Rewrite app.js and server.js based on selections
@@ -197,6 +207,18 @@ async function init() {
       appJsCode = appJsCode.replace(/import rateLimit from "express-rate-limit";\r?\n/, '');
       appJsCode = appJsCode.replace(/\/\/ Rate Limiting[\s\S]*?app\.use\("\/api", limiter\);[^\n]*\n/g, '');
     }
+    if (!deps.compression) {
+      appJsCode = appJsCode.replace(/import compression from "compression";\r?\n/, '');
+      appJsCode = appJsCode.replace(/\/\/ Compress responses\r?\napp\.use\(compression\(\)\);\r?\n/, '');
+    }
+    if (!deps['express-mongo-sanitize']) {
+      appJsCode = appJsCode.replace(/import mongoSanitize from "express-mongo-sanitize";\r?\n/, '');
+      appJsCode = appJsCode.replace(/\/\/ Prevent NoSQL injection attacks\r?\napp\.use\(mongoSanitize\(\)\);\r?\n/, '');
+    }
+    if (!deps.hpp) {
+      appJsCode = appJsCode.replace(/import hpp from "hpp";\r?\n/, '');
+      appJsCode = appJsCode.replace(/\/\/ Prevent HTTP Parameter Pollution\r?\napp\.use\(hpp\(\)\);\r?\n/, '');
+    }
 
     fs.writeFileSync(appJsPath, appJsCode);
   }
@@ -207,10 +229,11 @@ async function init() {
     
     if (!deps.mongoose) {
       serverJsCode = serverJsCode.replace(/import connectDB from "#db\/index\.js";\r?\n/, '');
-      serverJsCode = serverJsCode.replace(/connectDB\(\)\r?\n    \.then\(\(\) => \{\r?\n/, '');
-      serverJsCode = serverJsCode.replace(/    \}\)\r?\n    \.catch\(\(err\) => \{\r?\n        console\.log\("MONGO db connection failed !!! ", err\);\r?\n    \}\);\r?\n/, '');
-      // Fix indentation for app.listen
-      serverJsCode = serverJsCode.replace(/        app\.listen\(PORT, \(\) => \{\r?\n            console\.log\(`Server is running at port : \$\{PORT\}`\);\r?\n        \}\);\r?\n/, 'app.listen(PORT, () => {\n    console.log(`Server is running at port : ${PORT}`);\n});\n');
+      // Replace the connectDB().then().catch() block with a direct server listen + graceful shutdown
+      serverJsCode = serverJsCode.replace(
+        /connectDB\(\)\r?\n    \.then\(\(\) => \{[\s\S]*?\}\)\r?\n    \.catch\(\(err\) => \{\r?\n        console\.log\("MONGO db connection failed !!! ", err\);\r?\n    \}\);/,
+        `const server = app.listen(PORT, () => {\n    console.log(\`Server is running at port : \${PORT}\`);\n});\n\n// Graceful Shutdown\nconst gracefulShutdown = (signal) => {\n    console.log(\`\${signal} received. Shutting down gracefully...\`);\n    server.close(() => {\n        console.log("HTTP server closed.");\n        process.exit(0);\n    });\n    setTimeout(() => {\n        console.error("Could not close connections in time, forcing shutdown.");\n        process.exit(1);\n    }, 10000).unref();\n};\n\nprocess.on("SIGTERM", () => gracefulShutdown("SIGTERM"));\nprocess.on("SIGINT", () => gracefulShutdown("SIGINT"));`
+      );
       
       const dbDir = path.join(projectPath, 'src', 'db');
       if (fs.existsSync(dbDir)) fs.rmSync(dbDir, { recursive: true, force: true });
@@ -257,6 +280,27 @@ async function init() {
     path.join(projectPath, 'package.json'), 
     JSON.stringify(packageJsonTemplate, null, 2)
   );
+
+  // Generate .prettierrc when prettier is selected
+  if (deps.prettier) {
+    const prettierConfig = {
+      semi: true,
+      singleQuote: true,
+      tabWidth: 2,
+      trailingComma: "es5",
+      printWidth: 100
+    };
+    fs.writeFileSync(path.join(projectPath, '.prettierrc'), JSON.stringify(prettierConfig, null, 2));
+  }
+
+  // Always generate nodemon.json for a better dev experience
+  const nodemonConfig = {
+    watch: ["src"],
+    ext: "js,json",
+    ignore: ["src/**/*.test.js"],
+    exec: "node src/server.js"
+  };
+  fs.writeFileSync(path.join(projectPath, 'nodemon.json'), JSON.stringify(nodemonConfig, null, 2));
 
   // Install Dependencies
   const dependenciesToInstall = Object.keys(deps).filter(dep => deps[dep] && dep !== 'prettier');

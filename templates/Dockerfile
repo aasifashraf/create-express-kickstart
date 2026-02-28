@@ -1,20 +1,36 @@
-# Use official Node.js runtime as a parent image
-FROM node:20-alpine
+# ---- Build stage ----
+FROM node:20-alpine AS builder
 
-# Set working directory inside the container
 WORKDIR /usr/src/app
 
-# Copy package.json and lockfile based on package manager used
-COPY package.json ./
+# Copy dependency manifests first for better layer caching
+COPY package*.json ./
 
-# Install project dependencies
-RUN npm install --production
+# Install only production dependencies
+RUN npm ci --omit=dev
 
-# Bundle app source
+# ---- Production stage ----
+FROM node:20-alpine
+
+WORKDIR /usr/src/app
+
+# Create a non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Copy installed dependencies from builder
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+
+# Copy application source
 COPY . .
 
-# Expose port the app runs on
-EXPOSE 3000
+# Set correct ownership
+RUN chown -R appuser:appgroup /usr/src/app
 
-# Command to run your app
+# Run as non-root user
+USER appuser
+
+# Expose port the app runs on
+EXPOSE 8000
+
+# Command to run the application
 CMD [ "node", "src/server.js" ]

@@ -47,9 +47,15 @@ npm run dev
 - **Robust Error Handling**: Centralized error management using custom `ApiError` and `errorHandler` middleware.
 - **Standardized Responses**: Consistent API responses using the `ApiResponse` utility class.
 - **No Try-Catch Hell**: `asyncHandler` wrapper to effortlessly catch unhandled promise rejections.
-- **Security First**: Pre-configured with `helmet`, `cors`, and `express-rate-limit`.
+- **Security First**: Pre-configured with `helmet`, `cors`, `express-rate-limit`, `hpp` (HTTP Parameter Pollution), and `express-mongo-sanitize` (NoSQL injection prevention).
+- **Graceful Shutdown**: Handles `SIGTERM` and `SIGINT` signals to close HTTP connections cleanly before exiting.
+- **Process Error Safety**: `uncaughtException` and `unhandledRejection` handlers to prevent silent crashes.
+- **Compressed Responses**: Optional `compression` middleware for gzip/deflate response compression.
 - **Database Ready**: Built-in support and structural setup for MongoDB with `mongoose`.
-- **Developer Experience**: Hot reloading with `nodemon` and request logging with `pino`.
+- **Developer Experience**: Hot reloading via `nodemon.json` config, request logging with `pino`, and optional `pino-pretty`.
+- **Code Formatting**: Optional Prettier integration with a pre-configured `.prettierrc`.
+- **Testing Ready**: Optional Jest setup with `jest.config.js` (ESM-compatible) and boilerplate tests.
+- **Docker Support**: Optional multi-stage `Dockerfile` with a non-root user for production-grade container builds.
 - **Path Aliasing Native**: Pre-configured subpath imports (`#utils/...`).
 
 ---

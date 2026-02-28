@@ -4,6 +4,9 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
 import rateLimit from "express-rate-limit";
+import mongoSanitize from "express-mongo-sanitize";
+import compression from "compression";
+import hpp from "hpp";
 import { errorHandler } from "#middlewares/errorHandler.middleware.js";
 
 // Import routers
@@ -50,6 +53,9 @@ app.use(pinoHttp({
     })() : undefined
 }));
 
+// Compress responses
+app.use(compression());
+
 // CORS setup
 app.use(
     cors({
@@ -63,6 +69,12 @@ app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public")); 
 app.use(cookieParser());
+
+// Prevent NoSQL injection attacks
+app.use(mongoSanitize());
+
+// Prevent HTTP Parameter Pollution
+app.use(hpp());
 
 // -------- API ROUTES ---------
 // Mount routers
