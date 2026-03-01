@@ -21,11 +21,11 @@ async function init() {
   
   let projectName = projectNameArg;
   if (!projectName) {
-    projectName = await question('\n👉 Project Directory Name (e.g. my-awesome-api): ');
+    projectName = await question('\n> Project Directory Name (e.g. my-awesome-api): ');
   }
   
   if (!projectName) {
-    console.error('\n❌ Error: Project Directory Name is required.');
+    console.error('\nError: Project Directory Name is required.');
     process.exit(1);
   }
 
@@ -33,19 +33,19 @@ async function init() {
   const projectPath = path.join(currentPath, projectName);
 
   if (fs.existsSync(projectPath)) {
-    console.error(`\n❌ Error: Folder ${projectName} already exists. Please choose a different directory name.\n`);
+    console.error(`\nError: Folder ${projectName} already exists. Please choose a different directory name.\n`);
     process.exit(1);
   }
 
-  let packageJsonName = await question(`👉 package.json name (${projectName}): `);
+  let packageJsonName = await question(`> package.json name (${projectName}): `);
   if (!packageJsonName.trim()) {
     packageJsonName = projectName; // Fallback to directory name
   }
 
-  const description = await question('👉 Project description: ');
-  const author = await question('👉 Author name: ');
+  const description = await question('> Project description: ');
+  const author = await question('> Author name: ');
 
-  console.log('\n--- 📦 Select Dependencies ---');
+  console.log('\n---  Select Dependencies ---');
   console.log('Press Enter for Yes (Y), type "n" for No.\n');
 
   const deps = {
@@ -65,19 +65,19 @@ async function init() {
     installPinoPretty = (await question('Include pino-pretty for clean development logs? [Y/n] ')).toLowerCase() !== 'n';
   }
 
-  const packageManagerChoice = await question('\n👉 Which package manager would you like to use? [npm/yarn/pnpm/bun] (default: npm): ');
+  const packageManagerChoice = await question('\n> Which package manager would you like to use? [npm/yarn/pnpm/bun] (default: npm): ');
   const packageManager = ['yarn', 'pnpm', 'bun'].includes(packageManagerChoice.trim().toLowerCase()) 
     ? packageManagerChoice.trim().toLowerCase() 
     : 'npm';
     
-  const initGit = (await question('\n👉 Initialize a git repository? [Y/n] ')).toLowerCase() !== 'n';
-  const initDocker = (await question('👉 Include Dockerfile & docker-compose.yml? [Y/n] ')).toLowerCase() !== 'n';
-  const initAuth = (await question('👉 Include basic JWT Auth boilerplate? [Y/n] ')).toLowerCase() !== 'n';
-  const initTests = (await question('👉 Include Jest setup and boilerplate tests? [Y/n] ')).toLowerCase() !== 'n';
+  const initGit = (await question('\n> Initialize a git repository? [Y/n] ')).toLowerCase() !== 'n';
+  const initDocker = (await question('> Include Dockerfile & docker-compose.yml? [Y/n] ')).toLowerCase() !== 'n';
+  const initAuth = (await question('> Include basic JWT Auth boilerplate? [Y/n] ')).toLowerCase() !== 'n';
+  const initTests = (await question('> Include Jest setup and boilerplate tests? [Y/n] ')).toLowerCase() !== 'n';
 
   rl.close();
 
-  console.log(`\n🚀 Creating a new Node.js Express API in ${projectPath}...`);
+  console.log(`\n Creating a new Node.js Express API in ${projectPath}...`);
   fs.mkdirSync(projectPath, { recursive: true });
 
   function copyRecursiveSync(src, dest) {
@@ -99,15 +99,15 @@ async function init() {
   const targetSrcDir = path.join(projectPath, 'src');
 
   if (!fs.existsSync(sourceDir)) {
-    console.error('\n❌ Error: Could not find "src" directory in the template generator.');
+    console.error('\nError: Could not find "src" directory in the template generator.');
     process.exit(1);
   }
 
-  console.log(`📂 Bootstrapping application structure (errorHandler, ApiResponse, async handlers)...`);
+  console.log(` Bootstrapping application structure (errorHandler, ApiResponse, async handlers)...`);
   copyRecursiveSync(sourceDir, targetSrcDir);
 
   // 2. Copy .env.example
-  console.log(`🔧 Generating environment files...`);
+  console.log(` Generating environment files...`);
   const envExamplePath = path.join(__dirname, '..', '.env.example');
   if (fs.existsSync(envExamplePath)) {
     fs.copyFileSync(envExamplePath, path.join(projectPath, '.env.example'));
@@ -115,7 +115,7 @@ async function init() {
   }
 
   if (initDocker) {
-    console.log(`🐳 Adding Docker files...`);
+    console.log(` Adding Docker files...`);
     const dockerfilePath = path.join(__dirname, '..', 'templates', 'Dockerfile');
     const dockerComposePath = path.join(__dirname, '..', 'templates', 'docker-compose.yml');
     
@@ -127,7 +127,7 @@ async function init() {
   }
 
   if (initAuth) {
-    console.log(`🔐 Adding Auth templates...`);
+    console.log(` Adding Auth templates...`);
     // Need to ensure directories exist
     fs.mkdirSync(path.join(projectPath, 'src', 'controllers'), { recursive: true });
     fs.mkdirSync(path.join(projectPath, 'src', 'middlewares'), { recursive: true });
@@ -147,13 +147,33 @@ async function init() {
       path.join(projectPath, 'src', 'routes', 'auth.routes.js')
     );
     
-    // Append JWT secret to env example
-    fs.appendFileSync(path.join(projectPath, '.env.example'), '\nJWT_SECRET=supersecretjwtkey123\n');
-    fs.appendFileSync(path.join(projectPath, '.env'), '\nJWT_SECRET=supersecretjwtkey123\n');
+    // Append JWT secret and Salt Rounds to env example
+    fs.appendFileSync(path.join(projectPath, '.env.example'), '\nJWT_SECRET=supersecretjwtkey123\nBCRYPT_SALT=10\n');
+    fs.appendFileSync(path.join(projectPath, '.env'), '\nJWT_SECRET=supersecretjwtkey123\nBCRYPT_SALT=10\n');
+
+    const utilsPath = path.join(projectPath, 'src', 'utils');
+    if (!fs.existsSync(utilsPath)) {
+      fs.mkdirSync(utilsPath, { recursive: true });
+    }
+    fs.writeFileSync(
+      path.join(utilsPath, 'hash.util.js'),
+`import bcrypt from "bcryptjs";
+
+export const hashData = async (data, saltRounds = process.env.BCRYPT_SALT) => {
+    const salt = await bcrypt.genSalt(Number(saltRounds) || 10);
+    return await bcrypt.hash(data, salt);
+};
+
+export const compareData = async (data, hashedData) => {
+    return await bcrypt.compare(data, hashedData);
+};
+`
+    );
+
   }
 
   if (initTests) {
-    console.log(`🧪 Adding Jest test templates...`);
+    console.log(` Adding Jest test templates...`);
     fs.mkdirSync(path.join(projectPath, 'tests'), { recursive: true });
     fs.copyFileSync(
       path.join(__dirname, '..', 'templates', 'tests', 'healthcheck.test.js'),
@@ -225,7 +245,7 @@ async function init() {
   }
 
   // 3. Create package.json
-  console.log(`📦 Setting up package.json...`);
+  console.log(` Setting up package.json...`);
   const packageJsonTemplate = {
     name: packageJsonName.trim(),
     version: "1.0.0",
@@ -279,7 +299,7 @@ async function init() {
     
     // Inject dependencies directly into package.json instead of doing them via raw arguments.
     // This perfectly bypasses PNPM / YARN / BUN specific registry caching bugs when downloading deeply nested trees.
-    console.log(`\n⏳ Configuring ${packageManager} and resolving dependency trees...`);
+    console.log(`\n Configuring ${packageManager} and resolving dependency trees...`);
     const finalPackageJsonPath = path.join(projectPath, 'package.json');
     const finalPackageJsonCode = JSON.parse(fs.readFileSync(finalPackageJsonPath, 'utf8'));
     
@@ -294,12 +314,12 @@ async function init() {
     
     fs.writeFileSync(finalPackageJsonPath, JSON.stringify(finalPackageJsonCode, null, 2));
 
-    console.log(`\n⏳ Running final installation via ${packageManager} (This might take a minute)...`);
+    console.log(`\n Running final installation via ${packageManager} (This might take a minute)...`);
     const installTriggerCmd = packageManager === 'npm' ? 'npm install' : `${packageManager} install`;
     execSync(installTriggerCmd, execConfig);
 
     if (initGit) {
-      console.log(`\n🌱 Initializing Git repository...`);
+      console.log(`\n Initializing Git repository...`);
       execSync('git init', { cwd: projectPath, stdio: 'inherit' });
       // Create .gitignore
       const gitignoreContent = "node_modules\n.env\ndist\nbuild\ncoverage\n";
@@ -308,7 +328,7 @@ async function init() {
       execSync('git commit -m "initial commit"', { cwd: projectPath, stdio: 'inherit' });
     }
 
-    console.log(`\n✅ Success! Created "${projectName}" at ${projectPath}`);
+    console.log(`\n Success! Created "${projectName}" at ${projectPath}`);
     console.log('\nInside that directory, you can run several commands:');
     console.log(`\n  ${packageManager === 'npm' ? 'npm run' : packageManager} dev`);
     console.log('    Starts the development server on localhost.');
@@ -318,11 +338,11 @@ async function init() {
     console.log(`\n  cd ${projectName}`);
     console.log(`  ${packageManager === 'npm' ? 'npm run' : packageManager} dev\n`);
   } catch (err) {
-    console.error('\n❌ Failed to install dependencies. You may need to install them manually inside the folder.', err);
+    console.error('\nFailed to install dependencies. You may need to install them manually inside the folder.', err);
   }
 }
 
 init().catch(err => {
-  console.error('\n❌ Unexpected error occurred:', err);
+  console.error('\nUnexpected error occurred:', err);
   process.exit(1);
 });

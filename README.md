@@ -8,7 +8,7 @@ A powerful CLI tool to instantly scaffold a production-ready, feature-rich backe
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 You do not need to clone this repository, install dependencies manually, or write an initial configuration yourself. Use `npx` (which comes with npm 5.2+) to instantly generate your backend boilerplate!
 
@@ -41,7 +41,7 @@ npm run dev
 
 ---
 
-## 🌟 Features
+##  Features
 
 - **Modern JavaScript**: ES6 Modules (`import`/`export`) enabled by default.
 - **Robust Error Handling**: Centralized error management using custom `ApiError` and `errorHandler` middleware.
@@ -54,7 +54,7 @@ npm run dev
 
 ---
 
-## 🛠️ Core Utilities Built-In
+##  Core Utilities Built-In
 
 This template shines in its standardized utilities available out of the box for you:
 
@@ -82,10 +82,27 @@ const restrictedRoute = asyncHandler(async (req, res) => {
 
 ### `asyncHandler`
 A wrapper for your async route handlers that eliminates the need for repetitive `try-catch` blocks.
-## 🤝 Contributing & Repository
+
+### `hash.util.js`
+If you choose to install the basic JWT Auth boilerplate, we automatically generate a generic hashing utility utilizing `bcryptjs` to help you securely hash and compare data (like passwords) natively.
+```javascript
+import { hashData, compareData } from "#utils/hash.util.js";
+
+const registerUser = asyncHandler(async (req, res) => {
+    const hashedPassword = await hashData("supersecret123");
+    // Store hashedPassword...
+});
+
+const loginUser = asyncHandler(async (req, res) => {
+    const isMatch = await compareData("supersecret123", user.hashedPassword);
+    // ...
+});
+```
+
+##  Contributing & Repository
 
 Love this tool? Want to add a feature or fix a bug?
 Feel free to open an issue or submit a pull request on our GitHub Repository!
 
-🔗 **GitHub Repository:** [https://github.com/aasifashraf/create-express-kickstart](https://github.com/aasifashraf/create-express-kickstart)
+ **GitHub Repository:** [https://github.com/aasifashraf/create-express-kickstart](https://github.com/aasifashraf/create-express-kickstart)
 
