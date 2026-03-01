@@ -6,6 +6,11 @@
 
 A powerful CLI tool to instantly scaffold a production-ready, feature-rich backend Node.js template specifically tailored for Express API applications. It adheres to modern best practices, providing standard structures for error handling, CORS setups, routing, and middlewares right out of the box.
 
+## Quick Start
+```bash
+npx create express-kickstart@latest my-app
+```
+
 ## What is `create-express-kickstart`?
 
 **The Purpose:** 
