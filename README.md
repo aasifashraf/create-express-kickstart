@@ -133,3 +133,5 @@ Feel free to open an issue or submit a pull request on our GitHub Repository!
 
  **GitHub Repository:** [https://github.com/aasifashraf/create-express-kickstart](https://github.com/aasifashraf/create-express-kickstart)
 
+ **NPM Package:** [https://www.npmjs.com/package/create-express-kickstart](https://www.npmjs.com/package/create-express-kickstart)
+
