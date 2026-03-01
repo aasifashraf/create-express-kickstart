@@ -148,8 +148,16 @@ async function init() {
     );
     
     // Append JWT secret and Salt Rounds to env example
-    fs.appendFileSync(path.join(projectPath, '.env.example'), '\nJWT_SECRET=supersecretjwtkey123\nBCRYPT_SALT=10\n');
-    fs.appendFileSync(path.join(projectPath, '.env'), '\nJWT_SECRET=supersecretjwtkey123\nBCRYPT_SALT=10\n');
+    const authEnvConfig = `
+# Bcrypt Configuration
+BCRYPT_SALT=10
+
+# JWT Configuration
+JWT_SECRET=supersecretjwtkey123
+JWT_EXPIRES_IN=1d
+`;
+    fs.appendFileSync(path.join(projectPath, '.env.example'), authEnvConfig);
+    fs.appendFileSync(path.join(projectPath, '.env'), authEnvConfig);
 
     const utilsPath = path.join(projectPath, 'src', 'utils');
     if (!fs.existsSync(utilsPath)) {
@@ -166,6 +174,20 @@ export const hashData = async (data, saltRounds = process.env.BCRYPT_SALT) => {
 
 export const compareData = async (data, hashedData) => {
     return await bcrypt.compare(data, hashedData);
+};
+`
+    );
+
+    fs.writeFileSync(
+      path.join(utilsPath, 'jwt.util.js'),
+`import jwt from "jsonwebtoken";
+
+export const generateToken = (payload, expiresIn = process.env.JWT_EXPIRES_IN || "1d") => {
+    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
+};
+
+export const verifyToken = (token) => {
+    return jwt.verify(token, process.env.JWT_SECRET);
 };
 `
     );

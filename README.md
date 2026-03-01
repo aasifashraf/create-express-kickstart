@@ -115,10 +115,11 @@ const restrictedRoute = asyncHandler(async (req, res) => {
 ### `asyncHandler`
 A wrapper for your async route handlers that eliminates the need for repetitive `try-catch` blocks.
 
-### `hash.util.js`
-If you choose to install the basic JWT Auth boilerplate, we automatically generate a generic hashing utility utilizing `bcryptjs` to help you securely hash and compare data (like passwords) natively.
+### `jwt.util.js` & `hash.util.js`
+If you choose to install the basic JWT Auth boilerplate, we automatically generate symmetric cryptography utilities wrapping `jsonwebtoken` and `bcryptjs`. This helps you map, hash, and assign JWT secrets synchronously against `.env`.
 ```javascript
 import { hashData, compareData } from "#utils/hash.util.js";
+import { generateToken, verifyToken } from "#utils/jwt.util.js";
 
 const registerUser = asyncHandler(async (req, res) => {
     const hashedPassword = await hashData("supersecret123");
@@ -127,7 +128,10 @@ const registerUser = asyncHandler(async (req, res) => {
 
 const loginUser = asyncHandler(async (req, res) => {
     const isMatch = await compareData("supersecret123", user.hashedPassword);
-    // ...
+    
+    // Generate JWT natively hooked up to process.env.JWT_SECRET
+    const token = generateToken({ id: user._id, role: "user" });
+    return res.json({ token });
 });
 ```
 
