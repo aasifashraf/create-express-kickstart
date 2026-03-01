@@ -8,7 +8,7 @@ A powerful CLI tool to instantly scaffold a production-ready, feature-rich backe
 
 ## Quick Start
 ```bash
-npx create express-kickstart@latest my-app
+npx create-express-kickstart@latest my-app
 ```
 
 ## What is `create-express-kickstart`?
