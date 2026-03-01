@@ -1,6 +1,6 @@
 {
   "name": "create-express-kickstart",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Production-ready CLI starter for Express APIs",
   "main": "bin/cli.js",
   "bin": {
