@@ -258,11 +258,6 @@ export const verifyToken = (token) => {
       if (fs.existsSync(dbDir)) fs.rmSync(dbDir, { recursive: true, force: true });
     }
 
-    if (!deps.dotenv) {
-      serverJsCode = serverJsCode.replace(/import dotenv from "dotenv";\r?\n/, '');
-      serverJsCode = serverJsCode.replace(/\/\/ Load environment variables[\s\S]*?\}\);\r?\n/, '');
-    }
-
     fs.writeFileSync(serverJsPath, serverJsCode);
   }
 
@@ -276,7 +271,7 @@ export const verifyToken = (token) => {
     type: "module",
     scripts: {
       "start": "node src/server.js",
-      "dev": "nodemon src/server.js"
+      "dev": deps.dotenv ? "nodemon -r dotenv/config src/server.js" : "nodemon src/server.js"
     },
     imports: {
       "#*": "./src/*"
@@ -296,21 +291,22 @@ export const verifyToken = (token) => {
 
   // Write package.json
   fs.writeFileSync(
-    path.join(projectPath, 'package.json'), 
+    path.join(projectPath, 'package.json'),
     JSON.stringify(packageJsonTemplate, null, 2)
   );
 
   // Install Dependencies
-  const dependenciesToInstall = Object.keys(deps).filter(dep => deps[dep] && dep !== 'prettier');
+  const dependenciesToInstall = Object.keys(deps).filter(dep => deps[dep] && dep !== 'prettier' && dep !== 'dotenv');
   if (deps['pino-http']) {
     dependenciesToInstall.push('pino');
   }
   if (initAuth) {
     dependenciesToInstall.push('jsonwebtoken', 'bcryptjs'); // Add bcryptjs too since it's standard with JWT
   }
-  
+
   const devDependenciesToInstall = ['nodemon'];
   if (deps.prettier) devDependenciesToInstall.push('prettier');
+  if (deps.dotenv) devDependenciesToInstall.push('dotenv');
   if (installPinoPretty) devDependenciesToInstall.push('pino-pretty');
   if (initTests) {
     devDependenciesToInstall.push('jest', 'supertest');

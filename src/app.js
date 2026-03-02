@@ -16,8 +16,8 @@ app.use(helmet());
 
 // Rate Limiting
 const limiter = rateLimit({
-    windowMs: process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000, // Default 15 minutes
-    limit: process.env.RATE_LIMIT_MAX || 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+    windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // Default 15 minutes
+    limit: Number(process.env.RATE_LIMIT_MAX) || 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
     standardHeaders: 'draft-7', // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
     message: "Too many requests from this IP, please try again later"
@@ -51,9 +51,12 @@ app.use(pinoHttp({
 }));
 
 // CORS setup
+if (!process.env.CORS_ORIGIN && process.env.NODE_ENV === "production") {
+    throw new Error("CORS_ORIGIN must be set");
+}
 app.use(
     cors({
-        origin: process.env.CORS_ORIGIN || "*", // Fallback to allowing everything
+        origin: process.env.CORS_ORIGIN || "*",
         credentials: true, // Allow cookies with requests
     })
 );
