@@ -297,7 +297,6 @@ export const verifyToken = (token) => {
 
   // Install Dependencies
   const dependenciesToInstall = Object.keys(deps).filter(dep => deps[dep] && dep !== 'prettier' && dep !== 'dotenv');
-  if (deps.dotenv) dependenciesToInstall.push('@dotenvx/dotenvx');
   if (deps['pino-http']) {
     dependenciesToInstall.push('pino');
   }
@@ -306,6 +305,7 @@ export const verifyToken = (token) => {
   }
 
   const devDependenciesToInstall = ['nodemon'];
+  if (deps.dotenv) devDependenciesToInstall.push('@dotenvx/dotenvx');
   if (deps.prettier) devDependenciesToInstall.push('prettier');
   if (installPinoPretty) devDependenciesToInstall.push('pino-pretty');
   if (initTests) {
