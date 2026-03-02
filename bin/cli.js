@@ -56,7 +56,7 @@ async function init() {
     'cookie-parser': (await question('Include cookie-parser? [Y/n] ')).toLowerCase() !== 'n',
     'pino-http': (await question('Include Pino (HTTP Logger)? [Y/n] ')).toLowerCase() !== 'n',
     'express-rate-limit': (await question('Include Rate Limiting? [Y/n] ')).toLowerCase() !== 'n',
-    dotenv: (await question('Include dotenv (Environment variables)? [Y/n] ')).toLowerCase() !== 'n',
+    dotenv: (await question('Include dotenvx (Environment variables)? [Y/n] ')).toLowerCase() !== 'n',
     prettier: (await question('Include Prettier (Code formatter)? [Y/n] ')).toLowerCase() !== 'n'
   };
 
@@ -111,7 +111,7 @@ async function init() {
   const envExamplePath = path.join(__dirname, '..', '.env.example');
   if (fs.existsSync(envExamplePath)) {
     fs.copyFileSync(envExamplePath, path.join(projectPath, '.env.example'));
-    fs.copyFileSync(envExamplePath, path.join(projectPath, '.env')); 
+    fs.copyFileSync(envExamplePath, path.join(projectPath, '.env.local'));
   }
 
   if (initDocker) {
@@ -157,7 +157,7 @@ JWT_SECRET=supersecretjwtkey123
 JWT_EXPIRES_IN=1d
 `;
     fs.appendFileSync(path.join(projectPath, '.env.example'), authEnvConfig);
-    fs.appendFileSync(path.join(projectPath, '.env'), authEnvConfig);
+    fs.appendFileSync(path.join(projectPath, '.env.local'), authEnvConfig);
 
     const utilsPath = path.join(projectPath, 'src', 'utils');
     if (!fs.existsSync(utilsPath)) {
@@ -270,8 +270,8 @@ export const verifyToken = (token) => {
     main: "src/server.js",
     type: "module",
     scripts: {
-      "start": "node src/server.js",
-      "dev": deps.dotenv ? "nodemon -r dotenv/config src/server.js" : "nodemon src/server.js"
+      "start": deps.dotenv ? "dotenvx run -f .env.local -- node src/server.js" : "node src/server.js",
+      "dev": deps.dotenv ? "dotenvx run -f .env.local -- nodemon src/server.js" : "nodemon src/server.js"
     },
     imports: {
       "#*": "./src/*"
@@ -297,6 +297,7 @@ export const verifyToken = (token) => {
 
   // Install Dependencies
   const dependenciesToInstall = Object.keys(deps).filter(dep => deps[dep] && dep !== 'prettier' && dep !== 'dotenv');
+  if (deps.dotenv) dependenciesToInstall.push('@dotenvx/dotenvx');
   if (deps['pino-http']) {
     dependenciesToInstall.push('pino');
   }
@@ -306,7 +307,6 @@ export const verifyToken = (token) => {
 
   const devDependenciesToInstall = ['nodemon'];
   if (deps.prettier) devDependenciesToInstall.push('prettier');
-  if (deps.dotenv) devDependenciesToInstall.push('dotenv');
   if (installPinoPretty) devDependenciesToInstall.push('pino-pretty');
   if (initTests) {
     devDependenciesToInstall.push('jest', 'supertest');
@@ -367,7 +367,7 @@ export const verifyToken = (token) => {
       console.log(`\n Initializing Git repository...`);
       execSync('git init', { cwd: projectPath, stdio: 'inherit' });
       // Create .gitignore
-      const gitignoreContent = "node_modules\n.env\ndist\nbuild\ncoverage\n";
+      const gitignoreContent = "node_modules\n.env\n.env.keys\n.env.local\ndist\nbuild\ncoverage\n";
       fs.writeFileSync(path.join(projectPath, '.gitignore'), gitignoreContent);
       execSync('git add .', { cwd: projectPath, stdio: 'inherit' });
       execSync('git commit -m "initial commit"', { cwd: projectPath, stdio: 'inherit' });

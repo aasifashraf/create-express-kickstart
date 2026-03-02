@@ -28,5 +28,8 @@
   "bugs": {
     "url": "https://github.com/aasifashraf/create-express-kickstart/issues"
   },
-  "homepage": "https://github.com/aasifashraf/create-express-kickstart#readme"
+  "homepage": "https://github.com/aasifashraf/create-express-kickstart#readme",
+  "dependencies": {
+    "@dotenvx/dotenvx": "^1.52.0"
+  }
 }
