@@ -336,6 +336,33 @@ export const verifyToken = (token) => {
     const installTriggerCmd = packageManager === 'npm' ? 'npm install' : `${packageManager} install`;
     execSync(installTriggerCmd, execConfig);
 
+    // Update package.json with the actual installed versions instead of "latest"
+    try {
+      const installedPackageJson = JSON.parse(fs.readFileSync(finalPackageJsonPath, 'utf8'));
+      
+      const getInstalledVersion = (dep) => {
+        try {
+          const depPkgPath = path.join(projectPath, 'node_modules', dep, 'package.json');
+          const depPkgCode = JSON.parse(fs.readFileSync(depPkgPath, 'utf8'));
+          return `^${depPkgCode.version}`;
+        } catch (err) {
+          return 'latest';
+        }
+      };
+
+      dependenciesToInstall.forEach(d => {
+        installedPackageJson.dependencies[d] = getInstalledVersion(d);
+      });
+
+      devDependenciesToInstall.forEach(d => {
+        installedPackageJson.devDependencies[d] = getInstalledVersion(d);
+      });
+
+      fs.writeFileSync(finalPackageJsonPath, JSON.stringify(installedPackageJson, null, 2));
+    } catch (err) {
+      // Silently fall back to 'latest' if parsing fails
+    }
+
     if (initGit) {
       console.log(`\n Initializing Git repository...`);
       execSync('git init', { cwd: projectPath, stdio: 'inherit' });
