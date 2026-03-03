@@ -120,7 +120,23 @@ async function init() {
     const dockerComposePath = path.join(__dirname, '..', 'templates', 'docker-compose.yml');
     
     // Fallbacks if templates aren't bundled right
-    if (fs.existsSync(dockerfilePath)) fs.copyFileSync(dockerfilePath, path.join(projectPath, 'Dockerfile'));
+    if (fs.existsSync(dockerfilePath)) {
+      const destDockerfilePath = path.join(projectPath, 'Dockerfile');
+      fs.copyFileSync(dockerfilePath, destDockerfilePath);
+      // Rewrite install command and lockfile COPY based on chosen package manager
+      const lockfileMap = { npm: 'package-lock.json*', yarn: 'yarn.lock*', pnpm: 'pnpm-lock.yaml*', bun: 'bun.lockb*' };
+      const installCmdMap = { npm: 'npm install --production', yarn: 'yarn install --production', pnpm: 'pnpm install --production', bun: 'bun install --production' };
+      let dockerfileContent = fs.readFileSync(destDockerfilePath, 'utf8');
+      dockerfileContent = dockerfileContent.replace(
+        'COPY package.json ./',
+        `COPY package.json ${lockfileMap[packageManager]} ./`
+      );
+      dockerfileContent = dockerfileContent.replace(
+        'RUN npm install --production',
+        `RUN ${installCmdMap[packageManager]}`
+      );
+      fs.writeFileSync(destDockerfilePath, dockerfileContent);
+    }
     if (fs.existsSync(dockerComposePath) && deps.mongoose) {
       fs.copyFileSync(dockerComposePath, path.join(projectPath, 'docker-compose.yml'));
     }
