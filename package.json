@@ -1,13 +1,13 @@
 {
   "name": "create-express-kickstart",
   "version": "1.3.3",
-  "description": "Production-ready CLI starter for Express APIs",
+  "description": "Configurable CLI starter for Express APIs",
   "main": "bin/cli.js",
   "bin": {
     "create-express-kickstart": "bin/cli.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tests/cli.test.js"
   },
   "keywords": [
     "cli",
