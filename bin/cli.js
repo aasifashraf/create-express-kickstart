@@ -1,409 +1,804 @@
 #!/usr/bin/env node
 
-import fs from 'fs';
-import path from 'path';
-import { execSync } from 'child_process';
-import { fileURLToPath } from 'url';
-import readline from 'readline';
+import { execSync } from "child_process";
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import readline from "readline";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.join(__dirname, "..");
+const DEFAULT_PORT = 8000;
+const DEFAULT_PACKAGE_MANAGER = "npm";
+const AUTH_SECRET_PLACEHOLDER = "replace-me-with-a-long-random-secret";
+const SUPPORTED_PACKAGE_MANAGERS = new Set(["npm", "yarn", "pnpm", "bun"]);
+const ENV_SKIP_INSTALL = "CREATE_EXPRESS_KICKSTART_SKIP_INSTALL";
+const ENV_SKIP_GIT = "CREATE_EXPRESS_KICKSTART_SKIP_GIT";
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
+const DEFAULT_DEPENDENCIES = {
+  express: true,
+  mongoose: true,
+  cors: true,
+  helmet: true,
+  "cookie-parser": true,
+  "pino-http": true,
+  "express-rate-limit": true,
+  dotenv: true,
+  prettier: true,
+};
 
-const question = (query) => new Promise((resolve) => rl.question(query, resolve));
-
-async function init() {
-  const projectNameArg = process.argv[2];
-  
-  let projectName = projectNameArg;
-  if (!projectName) {
-    projectName = await question('\n> Project Directory Name (e.g. my-awesome-api): ');
-  }
-  
-  if (!projectName) {
-    console.error('\nError: Project Directory Name is required.');
-    process.exit(1);
-  }
-
-  const currentPath = process.cwd();
-  const projectPath = path.join(currentPath, projectName);
-
-  if (fs.existsSync(projectPath)) {
-    console.error(`\nError: Folder ${projectName} already exists. Please choose a different directory name.\n`);
-    process.exit(1);
-  }
-
-  let packageJsonName = await question(`> package.json name (${projectName}): `);
-  if (!packageJsonName.trim()) {
-    packageJsonName = projectName; // Fallback to directory name
-  }
-
-  const description = await question('> Project description: ');
-  const author = await question('> Author name: ');
-
-  console.log('\n---  Select Dependencies ---');
-  console.log('Press Enter for Yes (Y), type "n" for No.\n');
-
-  const deps = {
-    express: true, // Always required
-    mongoose: (await question('Include Mongoose (MongoDB)? [Y/n] ')).toLowerCase() !== 'n',
-    cors: (await question('Include CORS? [Y/n] ')).toLowerCase() !== 'n',
-    helmet: (await question('Include Helmet (Security headers)? [Y/n] ')).toLowerCase() !== 'n',
-    'cookie-parser': (await question('Include cookie-parser? [Y/n] ')).toLowerCase() !== 'n',
-    'pino-http': (await question('Include Pino (HTTP Logger)? [Y/n] ')).toLowerCase() !== 'n',
-    'express-rate-limit': (await question('Include Rate Limiting? [Y/n] ')).toLowerCase() !== 'n',
-    dotenv: (await question('Include dotenvx (Environment variables)? [Y/n] ')).toLowerCase() !== 'n',
-    prettier: (await question('Include Prettier (Code formatter)? [Y/n] ')).toLowerCase() !== 'n'
-  };
-
-  let installPinoPretty = false;
-  if (deps['pino-http']) {
-    installPinoPretty = (await question('Include pino-pretty for clean development logs? [Y/n] ')).toLowerCase() !== 'n';
-  }
-
-  const packageManagerChoice = await question('\n> Which package manager would you like to use? [npm/yarn/pnpm/bun] (default: npm): ');
-  const packageManager = ['yarn', 'pnpm', 'bun'].includes(packageManagerChoice.trim().toLowerCase()) 
-    ? packageManagerChoice.trim().toLowerCase() 
-    : 'npm';
-    
-  const initGit = (await question('\n> Initialize a git repository? [Y/n] ')).toLowerCase() !== 'n';
-  const initDocker = (await question('> Include Dockerfile & docker-compose.yml? [Y/n] ')).toLowerCase() !== 'n';
-  const initAuth = (await question('> Include basic JWT Auth boilerplate? [Y/n] ')).toLowerCase() !== 'n';
-  const initTests = (await question('> Include Jest setup and boilerplate tests? [Y/n] ')).toLowerCase() !== 'n';
-
-  rl.close();
-
-  console.log(`\n Creating a new Node.js Express API in ${projectPath}...`);
-  fs.mkdirSync(projectPath, { recursive: true });
-
-  function copyRecursiveSync(src, dest) {
-    const exists = fs.existsSync(src);
-    const stats = exists && fs.statSync(src);
-    const isDirectory = exists && stats.isDirectory();
-    if (isDirectory) {
-      fs.mkdirSync(dest, { recursive: true });
-      fs.readdirSync(src).forEach((childItemName) => {
-        copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-      });
-    } else {
-      fs.copyFileSync(src, dest);
-    }
-  }
-
-  // 1. Copy src directory
-  const sourceDir = path.join(__dirname, '..', 'src');
-  const targetSrcDir = path.join(projectPath, 'src');
-
-  if (!fs.existsSync(sourceDir)) {
-    console.error('\nError: Could not find "src" directory in the template generator.');
-    process.exit(1);
-  }
-
-  console.log(` Bootstrapping application structure (errorHandler, ApiResponse, async handlers)...`);
-  copyRecursiveSync(sourceDir, targetSrcDir);
-
-  // 2. Copy .env.example
-  console.log(` Generating environment files...`);
-  const envExamplePath = path.join(__dirname, '..', '.env.example');
-  if (fs.existsSync(envExamplePath)) {
-    fs.copyFileSync(envExamplePath, path.join(projectPath, '.env.example'));
-    fs.copyFileSync(envExamplePath, path.join(projectPath, '.env.local'));
-  }
-
-  if (initDocker) {
-    console.log(` Adding Docker files...`);
-    const dockerfilePath = path.join(__dirname, '..', 'templates', 'Dockerfile');
-    const dockerComposePath = path.join(__dirname, '..', 'templates', 'docker-compose.yml');
-    
-    // Fallbacks if templates aren't bundled right
-    if (fs.existsSync(dockerfilePath)) {
-      const destDockerfilePath = path.join(projectPath, 'Dockerfile');
-      fs.copyFileSync(dockerfilePath, destDockerfilePath);
-      // Rewrite install command and lockfile COPY based on chosen package manager
-      const lockfileMap = { npm: 'package-lock.json*', yarn: 'yarn.lock*', pnpm: 'pnpm-lock.yaml*', bun: 'bun.lockb*' };
-      const installCmdMap = { npm: 'npm install --production', yarn: 'yarn install --production', pnpm: 'pnpm install --production', bun: 'bun install --production' };
-      let dockerfileContent = fs.readFileSync(destDockerfilePath, 'utf8');
-      dockerfileContent = dockerfileContent.replace(
-        'COPY package.json ./',
-        `COPY package.json ${lockfileMap[packageManager]} ./`
-      );
-      dockerfileContent = dockerfileContent.replace(
-        'RUN npm install --production',
-        `RUN ${installCmdMap[packageManager]}`
-      );
-      fs.writeFileSync(destDockerfilePath, dockerfileContent);
-    }
-    if (fs.existsSync(dockerComposePath) && deps.mongoose) {
-      fs.copyFileSync(dockerComposePath, path.join(projectPath, 'docker-compose.yml'));
-    }
-  }
-
-  if (initAuth) {
-    console.log(` Adding Auth templates...`);
-    // Need to ensure directories exist
-    fs.mkdirSync(path.join(projectPath, 'src', 'controllers'), { recursive: true });
-    fs.mkdirSync(path.join(projectPath, 'src', 'middlewares'), { recursive: true });
-    fs.mkdirSync(path.join(projectPath, 'src', 'routes'), { recursive: true });
-    
-    // Copy the templates
-    fs.copyFileSync(
-      path.join(__dirname, '..', 'templates', 'auth', 'auth.controller.js'),
-      path.join(projectPath, 'src', 'controllers', 'auth.controller.js')
-    );
-    fs.copyFileSync(
-      path.join(__dirname, '..', 'templates', 'auth', 'auth.middleware.js'),
-      path.join(projectPath, 'src', 'middlewares', 'auth.middleware.js')
-    );
-    fs.copyFileSync(
-      path.join(__dirname, '..', 'templates', 'auth', 'auth.routes.js'),
-      path.join(projectPath, 'src', 'routes', 'auth.routes.js')
-    );
-    
-    // Append JWT secret and Salt Rounds to env example
-    const authEnvConfig = `
-# Bcrypt Configuration
-BCRYPT_SALT=10
-
-# JWT Configuration
-JWT_SECRET=supersecretjwtkey123
-JWT_EXPIRES_IN=1d
+const GITIGNORE_CONTENT = `node_modules
+.env
+.env.keys
+.env.local
+dist
+build
+coverage
 `;
-    fs.appendFileSync(path.join(projectPath, '.env.example'), authEnvConfig);
-    fs.appendFileSync(path.join(projectPath, '.env.local'), authEnvConfig);
 
-    const utilsPath = path.join(projectPath, 'src', 'utils');
-    if (!fs.existsSync(utilsPath)) {
-      fs.mkdirSync(utilsPath, { recursive: true });
-    }
-    fs.writeFileSync(
-      path.join(utilsPath, 'hash.util.js'),
-`import bcrypt from "bcryptjs";
+const HASH_UTIL_TEMPLATE = `import bcrypt from "bcryptjs";
 
-export const hashData = async (data, saltRounds = process.env.BCRYPT_SALT) => {
+export const hashData = async (data, saltRounds = process.env.BCRYPT_SALT_ROUNDS) => {
     const salt = await bcrypt.genSalt(Number(saltRounds) || 10);
-    return await bcrypt.hash(data, salt);
+    return bcrypt.hash(data, salt);
 };
 
 export const compareData = async (data, hashedData) => {
-    return await bcrypt.compare(data, hashedData);
+    return bcrypt.compare(data, hashedData);
 };
-`
-    );
+`;
 
-    fs.writeFileSync(
-      path.join(utilsPath, 'jwt.util.js'),
-`import jwt from "jsonwebtoken";
+const JWT_UTIL_TEMPLATE = `import jwt from "jsonwebtoken";
+
+const getJwtSecret = () => {
+    if (!process.env.JWT_SECRET) {
+        throw new Error("JWT_SECRET must be set before using JWT helpers.");
+    }
+
+    return process.env.JWT_SECRET;
+};
 
 export const generateToken = (payload, expiresIn = process.env.JWT_EXPIRES_IN || "1d") => {
-    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
+    return jwt.sign(payload, getJwtSecret(), { expiresIn });
 };
 
 export const verifyToken = (token) => {
-    return jwt.verify(token, process.env.JWT_SECRET);
+    return jwt.verify(token, getJwtSecret());
 };
-`
-    );
+`;
 
+const DOCKER_TEMPLATE_MAP = {
+  npm: {
+    baseImage: "node:22-alpine",
+    packageManagerSetup: "",
+    installCommand: "npm install --omit=dev",
+    runtime: "node",
+  },
+  yarn: {
+    baseImage: "node:22-alpine",
+    packageManagerSetup: "RUN corepack enable",
+    installCommand: "yarn install --production=true",
+    runtime: "node",
+  },
+  pnpm: {
+    baseImage: "node:22-alpine",
+    packageManagerSetup: "RUN corepack enable",
+    installCommand: "pnpm install --prod",
+    runtime: "node",
+  },
+  bun: {
+    baseImage: "oven/bun:1-alpine",
+    packageManagerSetup: "",
+    installCommand: "bun install --production",
+    runtime: "bun",
+  },
+};
+
+const parseYesNo = (answer) => answer.trim().toLowerCase() !== "n";
+
+export const normalizePackageManager = (value) => {
+  const normalized = value.trim().toLowerCase();
+  return SUPPORTED_PACKAGE_MANAGERS.has(normalized)
+    ? normalized
+    : DEFAULT_PACKAGE_MANAGER;
+};
+
+const unique = (items) => [...new Set(items)];
+
+const createSecret = () => crypto.randomBytes(32).toString("hex");
+
+const copyRecursiveSync = (src, dest) => {
+  const stats = fs.statSync(src);
+
+  if (stats.isDirectory()) {
+    fs.mkdirSync(dest, { recursive: true });
+
+    for (const child of fs.readdirSync(src)) {
+      copyRecursiveSync(path.join(src, child), path.join(dest, child));
+    }
+
+    return;
   }
 
-  if (initTests) {
-    console.log(` Adding Jest test templates...`);
-    fs.mkdirSync(path.join(projectPath, 'tests'), { recursive: true });
-    fs.copyFileSync(
-      path.join(__dirname, '..', 'templates', 'tests', 'healthcheck.test.js'),
-      path.join(projectPath, 'tests', 'healthcheck.test.js')
-    );
+  fs.copyFileSync(src, dest);
+};
+
+const renderTemplate = (template, replacements) => {
+  let output = template;
+
+  for (const [token, value] of Object.entries(replacements)) {
+    output = output.replaceAll(token, value);
   }
 
-  // Rewrite app.js and server.js based on selections
-  let appJsPath = path.join(projectPath, 'src', 'app.js');
-  if (fs.existsSync(appJsPath)) {
-    let appJsCode = fs.readFileSync(appJsPath, 'utf8');
+  return output
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd()
+    .concat("\n");
+};
 
-    if (initAuth) {
-      appJsCode = appJsCode.replace(
-        '// Import routers',
-        '// Import routers\nimport authRouter from "#routes/auth.routes.js";'
-      );
-      appJsCode = appJsCode.replace(
-        '// Mount routers',
-        '// Mount routers\napp.use("/api/v1/auth", authRouter);'
-      );
-    }
-    if (!deps.cors) {
-      appJsCode = appJsCode.replace(/import cors from "cors";\r?\n/, '');
-      appJsCode = appJsCode.replace(/\/\/ CORS setup[\s\S]*?\n\);\r?\n/, '');
-    }
-    if (!deps.helmet) {
-      appJsCode = appJsCode.replace(/import helmet from "helmet";\r?\n/, '');
-      appJsCode = appJsCode.replace(/\/\/ Security HTTP headers\r?\napp\.use\(helmet\(\)\);\r?\n/, '');
-    }
-    if (!deps['cookie-parser']) {
-      appJsCode = appJsCode.replace(/import cookieParser from "cookie-parser";\r?\n/, '');
-      appJsCode = appJsCode.replace(/app\.use\(cookieParser\(\)\);\r?\n/, '');
-    }
-    if (!deps['pino-http']) {
-      appJsCode = appJsCode.replace(/import pinoHttp from "pino-http";\r?\n/, '');
-      appJsCode = appJsCode.replace(/\/\/ Logging[\s\S]*?\}\)\(\) \? : undefined\n\}\)\);\r?\n/g, ''); // Fallback block 
-      appJsCode = appJsCode.replace(/\/\/ Logging[\s\S]*?\}\)\(\) : undefined\r?\n\}\)\);\r?\n/g, '');
-    }
-    if (!deps['express-rate-limit']) {
-      appJsCode = appJsCode.replace(/import rateLimit from "express-rate-limit";\r?\n/, '');
-      appJsCode = appJsCode.replace(/\/\/ Rate Limiting[\s\S]*?app\.use\("\/api", limiter\);[^\n]*\n/g, '');
-    }
+const readTemplate = (...segments) =>
+  fs.readFileSync(path.join(ROOT_DIR, ...segments), "utf8");
 
-    fs.writeFileSync(appJsPath, appJsCode);
-  }
+const writeJson = (filePath, value) => {
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+};
 
-  let serverJsPath = path.join(projectPath, 'src', 'server.js');
-  if (fs.existsSync(serverJsPath)) {
-    let serverJsCode = fs.readFileSync(serverJsPath, 'utf8');
-    
-    if (!deps.mongoose) {
-      serverJsCode = serverJsCode.replace(/import connectDB from "#db\/index\.js";\r?\n/, '');
-      serverJsCode = serverJsCode.replace(/connectDB\(\)\r?\n    \.then\(\(\) => \{\r?\n/, '');
-      serverJsCode = serverJsCode.replace(/    \}\)\r?\n    \.catch\(\(err\) => \{\r?\n        console\.log\("MONGO db connection failed !!! ", err\);\r?\n    \}\);\r?\n/, '');
-      // Fix indentation for app.listen
-      serverJsCode = serverJsCode.replace(/        app\.listen\(PORT, \(\) => \{\r?\n            console\.log\(`Server is running at port : \$\{PORT\}`\);\r?\n        \}\);\r?\n/, 'app.listen(PORT, () => {\n    console.log(`Server is running at port : ${PORT}`);\n});\n');
-      
-      const dbDir = path.join(projectPath, 'src', 'db');
-      if (fs.existsSync(dbDir)) fs.rmSync(dbDir, { recursive: true, force: true });
-    }
+const appendBlock = (filePath, block) => {
+  const currentValue = fs.readFileSync(filePath, "utf8").trimEnd();
+  fs.writeFileSync(filePath, `${currentValue}\n\n${block.trim()}\n`);
+};
 
-    fs.writeFileSync(serverJsPath, serverJsCode);
-  }
-
-  // 3. Create package.json
-  console.log(` Setting up package.json...`);
+const createPackageJsonTemplate = (config) => {
   const packageJsonTemplate = {
-    name: packageJsonName.trim(),
+    name: config.packageJsonName.trim(),
     version: "1.0.0",
-    description: description || "A production-ready Node.js Express API",
+    description: config.description || "A configurable Node.js Express API starter",
     main: "src/server.js",
     type: "module",
     scripts: {
-      "start": deps.dotenv ? "dotenvx run -f .env.local -- node src/server.js" : "node src/server.js",
-      "dev": deps.dotenv ? "dotenvx run -f .env.local -- nodemon src/server.js" : "nodemon src/server.js"
+      start: config.deps.dotenv
+        ? "dotenvx run -f .env.local -- node src/server.js"
+        : "node src/server.js",
+      dev: config.deps.dotenv
+        ? "dotenvx run -f .env.local -- nodemon src/server.js"
+        : "nodemon src/server.js",
     },
     imports: {
-      "#*": "./src/*"
+      "#*": "./src/*",
     },
     keywords: ["express", "node", "api"],
-    author: author || "",
-    license: "ISC"
+    author: config.author || "",
+    license: "ISC",
   };
 
-  if (deps.prettier) {
-    packageJsonTemplate.scripts.format = "prettier --write \"src/**/*.{js,json}\"";
+  if (config.deps.prettier) {
+    packageJsonTemplate.scripts.format = 'prettier --write "src/**/*.{js,json}"';
   }
 
-  if (initTests) {
-    packageJsonTemplate.scripts.test = "node --experimental-vm-modules node_modules/jest/bin/jest.js";
+  if (config.initTests) {
+    packageJsonTemplate.scripts.test =
+      "node --experimental-vm-modules node_modules/jest/bin/jest.js";
   }
 
-  // Write package.json
-  fs.writeFileSync(
-    path.join(projectPath, 'package.json'),
-    JSON.stringify(packageJsonTemplate, null, 2)
+  return packageJsonTemplate;
+};
+
+const resolveDependencyLists = (config) => {
+  const dependencyCandidates = Object.entries(config.deps)
+    .filter(([dependencyName, enabled]) => {
+      return enabled && dependencyName !== "dotenv" && dependencyName !== "prettier";
+    })
+    .map(([dependencyName]) => dependencyName);
+
+  const dependencies = unique([
+    ...dependencyCandidates,
+    ...(config.deps["pino-http"] ? ["pino"] : []),
+    ...(config.initAuth ? ["jsonwebtoken", "bcryptjs"] : []),
+  ]);
+
+  const devDependencies = unique([
+    "nodemon",
+    ...(config.deps.dotenv ? ["@dotenvx/dotenvx"] : []),
+    ...(config.deps.prettier ? ["prettier"] : []),
+    ...(config.installPinoPretty && config.deps["pino-http"] ? ["pino-pretty"] : []),
+    ...(config.initTests ? ["jest", "supertest"] : []),
+  ]);
+
+  return { dependencies, devDependencies };
+};
+
+const updatePackageJsonDependencies = (projectPath, dependencies, devDependencies) => {
+  const packageJsonPath = path.join(projectPath, "package.json");
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+
+  packageJson.dependencies = Object.fromEntries(
+    dependencies.map((dependencyName) => [dependencyName, "latest"]),
+  );
+  packageJson.devDependencies = Object.fromEntries(
+    devDependencies.map((dependencyName) => [dependencyName, "latest"]),
   );
 
-  // Install Dependencies
-  const dependenciesToInstall = Object.keys(deps).filter(dep => deps[dep] && dep !== 'prettier' && dep !== 'dotenv');
-  if (deps['pino-http']) {
-    dependenciesToInstall.push('pino');
-  }
-  if (initAuth) {
-    dependenciesToInstall.push('jsonwebtoken', 'bcryptjs'); // Add bcryptjs too since it's standard with JWT
+  writeJson(packageJsonPath, packageJson);
+};
+
+const updatePackageJsonWithInstalledVersions = (projectPath, dependencies, devDependencies) => {
+  const packageJsonPath = path.join(projectPath, "package.json");
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+
+  const getInstalledVersion = (dependencyName) => {
+    try {
+      const dependencyPackageJson = JSON.parse(
+        fs.readFileSync(
+          path.join(projectPath, "node_modules", dependencyName, "package.json"),
+          "utf8",
+        ),
+      );
+
+      return `^${dependencyPackageJson.version}`;
+    } catch {
+      return "latest";
+    }
+  };
+
+  for (const dependencyName of dependencies) {
+    packageJson.dependencies[dependencyName] = getInstalledVersion(dependencyName);
   }
 
-  const devDependenciesToInstall = ['nodemon'];
-  if (deps.dotenv) devDependenciesToInstall.push('@dotenvx/dotenvx');
-  if (deps.prettier) devDependenciesToInstall.push('prettier');
-  if (installPinoPretty) devDependenciesToInstall.push('pino-pretty');
-  if (initTests) {
-    devDependenciesToInstall.push('jest', 'supertest');
+  for (const dependencyName of devDependencies) {
+    packageJson.devDependencies[dependencyName] = getInstalledVersion(dependencyName);
+  }
+
+  writeJson(packageJsonPath, packageJson);
+};
+
+const buildDockerfile = (packageManager) => {
+  const dockerTemplate = readTemplate("templates", "Dockerfile");
+  const dockerOptions = DOCKER_TEMPLATE_MAP[packageManager] || DOCKER_TEMPLATE_MAP.npm;
+
+  return renderTemplate(dockerTemplate, {
+    "__BASE_IMAGE__": dockerOptions.baseImage,
+    "__PACKAGE_MANAGER_SETUP__": dockerOptions.packageManagerSetup,
+    "__INSTALL_COMMAND__": dockerOptions.installCommand,
+    "__PORT__": String(DEFAULT_PORT),
+    "__RUNTIME__": dockerOptions.runtime,
+  });
+};
+
+const buildDockerCompose = () => {
+  const dockerComposeTemplate = readTemplate("templates", "docker-compose.yml");
+
+  return renderTemplate(dockerComposeTemplate, {
+    "__PORT__": String(DEFAULT_PORT),
+    "__MONGODB_URI__": "mongodb://mongo:27017/my_app_db",
+    "__CORS_ORIGIN__": "http://localhost:3000",
+  });
+};
+
+const buildAppCode = (config) => {
+  const appTemplate = readTemplate("src", "app.js");
+
+  return renderTemplate(appTemplate, {
+    "__CORS_IMPORT__": config.deps.cors ? 'import cors from "cors";' : "",
+    "__COOKIE_PARSER_IMPORT__": config.deps["cookie-parser"]
+      ? 'import cookieParser from "cookie-parser";'
+      : "",
+    "__HELMET_IMPORT__": config.deps.helmet ? 'import helmet from "helmet";' : "",
+    "__LOGGER_IMPORT__": config.deps["pino-http"] ? 'import pinoHttp from "pino-http";' : "",
+    "__RATE_LIMIT_IMPORT__": config.deps["express-rate-limit"]
+      ? 'import rateLimit from "express-rate-limit";'
+      : "",
+    "__AUTH_IMPORT__": config.initAuth ? 'import authRouter from "#routes/auth.routes.js";' : "",
+    "__HELMET_SETUP__": config.deps.helmet ? "app.use(helmet());" : "",
+    "__RATE_LIMIT_SETUP__": config.deps["express-rate-limit"]
+      ? `const limiter = rateLimit({
+    windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+    limit: Number(process.env.RATE_LIMIT_MAX) || 100,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: "Too many requests from this IP, please try again later",
+});
+
+app.use("/api", limiter);`
+      : "",
+    "__LOGGER_SETUP__": config.deps["pino-http"]
+      ? `const enablePrettyLogs =
+    process.env.NODE_ENV === "development" && process.env.PINO_PRETTY === "true";
+
+app.use(
+    pinoHttp({
+        customLogLevel(req, res, err) {
+            if (res.statusCode >= 500 || err) {
+                return "error";
+            }
+
+            if (res.statusCode >= 400) {
+                return "warn";
+            }
+
+            if (res.statusCode >= 300) {
+                return "silent";
+            }
+
+            return "info";
+        },
+        transport: enablePrettyLogs
+            ? {
+                  target: "pino-pretty",
+                  options: { colorize: true },
+              }
+            : undefined,
+    }),
+);`
+      : "",
+    "__CORS_SETUP__": config.deps.cors
+      ? `const allowedOrigins = (process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+const allowAllOrigins = allowedOrigins.includes("*");
+
+if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {
+    throw new Error("CORS_ORIGIN must list one or more allowed origins in production.");
+}
+
+app.use(
+    cors({
+        origin: allowAllOrigins
+            ? true
+            : allowedOrigins.length > 0
+              ? allowedOrigins
+              : true,
+        credentials: !allowAllOrigins && allowedOrigins.length > 0,
+    }),
+);`
+      : "",
+    "__COOKIE_PARSER_SETUP__": config.deps["cookie-parser"] ? "app.use(cookieParser());" : "",
+    "__AUTH_ROUTE__": config.initAuth ? 'app.use("/api/v1/auth", authRouter);' : "",
+  });
+};
+
+const buildServerCode = (config) => {
+  const serverTemplate = readTemplate("src", "server.js");
+
+  return renderTemplate(serverTemplate, {
+    "__DB_IMPORT__": config.deps.mongoose ? 'import connectDB from "#db/index.js";' : "",
+    "__SERVER_STARTUP__": config.deps.mongoose
+      ? `const bootstrap = async () => {
+    await connectDB();
+    startServer();
+};
+
+bootstrap().catch((error) => {
+    console.error("Database connection failed", error);
+    process.exit(1);
+});`
+      : "startServer();",
+  });
+};
+
+const ensureDir = (dirPath) => {
+  fs.mkdirSync(dirPath, { recursive: true });
+};
+
+const writeAuthUtilities = (projectPath) => {
+  const utilsPath = path.join(projectPath, "src", "utils");
+  ensureDir(utilsPath);
+
+  fs.writeFileSync(path.join(utilsPath, "hash.util.js"), HASH_UTIL_TEMPLATE);
+  fs.writeFileSync(path.join(utilsPath, "jwt.util.js"), JWT_UTIL_TEMPLATE);
+};
+
+const writeAuthFiles = (projectPath) => {
+  ensureDir(path.join(projectPath, "src", "controllers"));
+  ensureDir(path.join(projectPath, "src", "middlewares"));
+  ensureDir(path.join(projectPath, "src", "routes"));
+  ensureDir(path.join(projectPath, "src", "models"));
+
+  fs.copyFileSync(
+    path.join(ROOT_DIR, "templates", "auth", "auth.controller.js"),
+    path.join(projectPath, "src", "controllers", "auth.controller.js"),
+  );
+  fs.copyFileSync(
+    path.join(ROOT_DIR, "templates", "auth", "auth.middleware.js"),
+    path.join(projectPath, "src", "middlewares", "auth.middleware.js"),
+  );
+  fs.copyFileSync(
+    path.join(ROOT_DIR, "templates", "auth", "auth.routes.js"),
+    path.join(projectPath, "src", "routes", "auth.routes.js"),
+  );
+  fs.copyFileSync(
+    path.join(ROOT_DIR, "templates", "auth", "user.model.js"),
+    path.join(projectPath, "src", "models", "user.model.js"),
+  );
+};
+
+const addAuthEnvironment = (projectPath, secretGenerator) => {
+  appendBlock(
+    path.join(projectPath, ".env.example"),
+    `# Bcrypt Configuration
+BCRYPT_SALT_ROUNDS=10
+
+# JWT Configuration
+JWT_SECRET=${AUTH_SECRET_PLACEHOLDER}
+JWT_EXPIRES_IN=1d`,
+  );
+
+  appendBlock(
+    path.join(projectPath, ".env.local"),
+    `# Bcrypt Configuration
+BCRYPT_SALT_ROUNDS=10
+
+# JWT Configuration
+JWT_SECRET=${secretGenerator()}
+JWT_EXPIRES_IN=1d`,
+  );
+};
+
+const addPinoPrettyEnvironment = (projectPath) => {
+  appendBlock(path.join(projectPath, ".env.example"), "PINO_PRETTY=true");
+  appendBlock(path.join(projectPath, ".env.local"), "PINO_PRETTY=true");
+};
+
+const initializeGitRepository = ({ projectPath, runCommand, logger, skipGit }) => {
+  fs.writeFileSync(path.join(projectPath, ".gitignore"), GITIGNORE_CONTENT);
+
+  if (skipGit) {
+    logger.log(` Skipping git initialization because ${ENV_SKIP_GIT}=1.`);
+    return {
+      gitInitialized: false,
+      warnings: ["Git initialization was skipped by environment override."],
+    };
+  }
+
+  const warnings = [];
+
+  try {
+    runCommand("git init", { cwd: projectPath, stdio: "inherit" });
+    runCommand("git add .", { cwd: projectPath, stdio: "inherit" });
+    runCommand('git commit -m "initial commit"', {
+      cwd: projectPath,
+      stdio: "inherit",
+    });
+
+    return { gitInitialized: true, warnings };
+  } catch (error) {
+    warnings.push(
+      "Git initialization completed partially. Review git configuration before committing.",
+    );
+    logger.warn("\nGit setup could not finish cleanly. The project files are still ready to use.");
+
+    return { gitInitialized: false, warnings, error };
+  }
+};
+
+const installDependencies = ({
+  projectPath,
+  packageManager,
+  dependencies,
+  devDependencies,
+  runCommand,
+  logger,
+  skipInstall,
+}) => {
+  updatePackageJsonDependencies(projectPath, dependencies, devDependencies);
+
+  if (skipInstall) {
+    logger.log(`\n Skipping dependency installation because ${ENV_SKIP_INSTALL}=1.`);
+    return {
+      installSucceeded: false,
+      warnings: ["Dependency installation was skipped by environment override."],
+    };
   }
 
   try {
-    const execConfig = { cwd: projectPath, stdio: 'inherit' };
-    
-    // Inject dependencies directly into package.json instead of doing them via raw arguments.
-    // This perfectly bypasses PNPM / YARN / BUN specific registry caching bugs when downloading deeply nested trees.
-    console.log(`\n Configuring ${packageManager} and resolving dependency trees...`);
-    const finalPackageJsonPath = path.join(projectPath, 'package.json');
-    const finalPackageJsonCode = JSON.parse(fs.readFileSync(finalPackageJsonPath, 'utf8'));
-    
-    // We add them dynamically so package managers can evaluate them holistically at once
-    const latestDeps = {};
-    dependenciesToInstall.forEach(d => latestDeps[d] = 'latest');
-    finalPackageJsonCode.dependencies = latestDeps;
+    logger.log(`\n Configuring ${packageManager} and resolving dependency trees...`);
+    logger.log(`\n Running final installation via ${packageManager} (this might take a minute)...`);
 
-    const latestDevDeps = {};
-    devDependenciesToInstall.forEach(d => latestDevDeps[d] = 'latest');
-    finalPackageJsonCode.devDependencies = latestDevDeps;
-    
-    fs.writeFileSync(finalPackageJsonPath, JSON.stringify(finalPackageJsonCode, null, 2));
+    const installCommand =
+      packageManager === "npm" ? "npm install" : `${packageManager} install`;
 
-    console.log(`\n Running final installation via ${packageManager} (This might take a minute)...`);
-    const installTriggerCmd = packageManager === 'npm' ? 'npm install' : `${packageManager} install`;
-    execSync(installTriggerCmd, execConfig);
+    runCommand(installCommand, { cwd: projectPath, stdio: "inherit" });
+    updatePackageJsonWithInstalledVersions(projectPath, dependencies, devDependencies);
 
-    // Update package.json with the actual installed versions instead of "latest"
-    try {
-      const installedPackageJson = JSON.parse(fs.readFileSync(finalPackageJsonPath, 'utf8'));
-      
-      const getInstalledVersion = (dep) => {
-        try {
-          const depPkgPath = path.join(projectPath, 'node_modules', dep, 'package.json');
-          const depPkgCode = JSON.parse(fs.readFileSync(depPkgPath, 'utf8'));
-          return `^${depPkgCode.version}`;
-        } catch (err) {
-          return 'latest';
-        }
-      };
+    return { installSucceeded: true, warnings: [] };
+  } catch (error) {
+    logger.warn(
+      "\nDependency installation did not complete. You can still open the project and run the install manually.",
+    );
 
-      dependenciesToInstall.forEach(d => {
-        installedPackageJson.dependencies[d] = getInstalledVersion(d);
-      });
-
-      devDependenciesToInstall.forEach(d => {
-        installedPackageJson.devDependencies[d] = getInstalledVersion(d);
-      });
-
-      fs.writeFileSync(finalPackageJsonPath, JSON.stringify(installedPackageJson, null, 2));
-    } catch (err) {
-      // Silently fall back to 'latest' if parsing fails
-    }
-
-    if (initGit) {
-      console.log(`\n Initializing Git repository...`);
-      execSync('git init', { cwd: projectPath, stdio: 'inherit' });
-      // Create .gitignore
-      const gitignoreContent = "node_modules\n.env\n.env.keys\n.env.local\ndist\nbuild\ncoverage\n";
-      fs.writeFileSync(path.join(projectPath, '.gitignore'), gitignoreContent);
-      execSync('git add .', { cwd: projectPath, stdio: 'inherit' });
-      execSync('git commit -m "initial commit"', { cwd: projectPath, stdio: 'inherit' });
-    }
-
-    console.log(`\n Success! Created "${projectName}" at ${projectPath}`);
-    console.log('\nInside that directory, you can run several commands:');
-    console.log(`\n  ${packageManager === 'npm' ? 'npm run' : packageManager} dev`);
-    console.log('    Starts the development server on localhost.');
-    console.log(`\n  ${packageManager === 'npm' ? 'npm' : packageManager} start`);
-    console.log('    Starts the production server.');
-    console.log('\nWe suggest that you begin by typing:');
-    console.log(`\n  cd ${projectName}`);
-    console.log(`  ${packageManager === 'npm' ? 'npm run' : packageManager} dev\n`);
-  } catch (err) {
-    console.error('\nFailed to install dependencies. You may need to install them manually inside the folder.', err);
+    return {
+      installSucceeded: false,
+      warnings: [
+        "Dependency installation failed. Run the package manager manually inside the project.",
+      ],
+      error,
+    };
   }
-}
+};
 
-init().catch(err => {
-  console.error('\nUnexpected error occurred:', err);
-  process.exit(1);
-});
+export const createProject = (rawConfig, runtime = {}) => {
+  const logger = runtime.logger || console;
+  const cwd = runtime.cwd || process.cwd();
+  const runCommand = runtime.runCommand || execSync;
+  const secretGenerator = runtime.secretGenerator || createSecret;
+  const skipInstall = runtime.skipInstall ?? process.env[ENV_SKIP_INSTALL] === "1";
+  const skipGit = runtime.skipGit ?? process.env[ENV_SKIP_GIT] === "1";
+
+  const config = {
+    ...rawConfig,
+    projectName: rawConfig.projectName?.trim(),
+    packageJsonName: rawConfig.packageJsonName?.trim() || rawConfig.projectName?.trim(),
+    packageManager: normalizePackageManager(
+      rawConfig.packageManager || DEFAULT_PACKAGE_MANAGER,
+    ),
+    deps: {
+      ...DEFAULT_DEPENDENCIES,
+      ...rawConfig.deps,
+      express: true,
+    },
+  };
+
+  if (!config.projectName) {
+    throw new Error("Project directory name is required.");
+  }
+
+  if (!config.packageJsonName) {
+    throw new Error("package.json name is required.");
+  }
+
+  const warnings = [];
+  const projectPath = path.join(cwd, config.projectName);
+
+  if (fs.existsSync(projectPath)) {
+    throw new Error(
+      `Folder ${config.projectName} already exists. Please choose a different directory name.`,
+    );
+  }
+
+  if (config.initAuth && !config.deps.mongoose) {
+    config.deps.mongoose = true;
+    const authWarning =
+      "JWT auth boilerplate requires Mongoose in this starter, so MongoDB support was enabled automatically.";
+    warnings.push(authWarning);
+    logger.log(`\n ${authWarning}`);
+  }
+
+  logger.log(`\n Creating a new Node.js Express API in ${projectPath}...`);
+  fs.mkdirSync(projectPath, { recursive: true });
+
+  const sourceDir = path.join(ROOT_DIR, "src");
+  const targetSrcDir = path.join(projectPath, "src");
+
+  if (!fs.existsSync(sourceDir)) {
+    throw new Error('Could not find "src" directory in the template generator.');
+  }
+
+  logger.log(" Bootstrapping application structure...");
+  copyRecursiveSync(sourceDir, targetSrcDir);
+
+  logger.log(" Generating environment files...");
+  const envExamplePath = path.join(ROOT_DIR, ".env.example");
+  if (fs.existsSync(envExamplePath)) {
+    fs.copyFileSync(envExamplePath, path.join(projectPath, ".env.example"));
+    fs.copyFileSync(envExamplePath, path.join(projectPath, ".env.local"));
+  }
+
+  fs.writeFileSync(path.join(targetSrcDir, "app.js"), buildAppCode(config));
+  fs.writeFileSync(path.join(targetSrcDir, "server.js"), buildServerCode(config));
+
+  if (!config.deps.mongoose) {
+    const dbDir = path.join(targetSrcDir, "db");
+    if (fs.existsSync(dbDir)) {
+      fs.rmSync(dbDir, { recursive: true, force: true });
+    }
+  }
+
+  if (config.initDocker) {
+    logger.log(" Adding Docker files...");
+    fs.writeFileSync(path.join(projectPath, "Dockerfile"), buildDockerfile(config.packageManager));
+    fs.copyFileSync(
+      path.join(ROOT_DIR, "templates", ".dockerignore"),
+      path.join(projectPath, ".dockerignore"),
+    );
+
+    if (config.deps.mongoose) {
+      fs.writeFileSync(path.join(projectPath, "docker-compose.yml"), buildDockerCompose());
+    }
+  }
+
+  if (config.initAuth) {
+    logger.log(" Adding auth templates...");
+    writeAuthFiles(projectPath);
+    writeAuthUtilities(projectPath);
+    addAuthEnvironment(projectPath, secretGenerator);
+  }
+
+  if (config.installPinoPretty && config.deps["pino-http"]) {
+    addPinoPrettyEnvironment(projectPath);
+  }
+
+  if (config.initTests) {
+    logger.log(" Adding Jest test templates...");
+    ensureDir(path.join(projectPath, "tests"));
+    fs.copyFileSync(
+      path.join(ROOT_DIR, "templates", "tests", "healthcheck.test.js"),
+      path.join(projectPath, "tests", "healthcheck.test.js"),
+    );
+  }
+
+  logger.log(" Setting up package.json...");
+  writeJson(path.join(projectPath, "package.json"), createPackageJsonTemplate(config));
+
+  const { dependencies, devDependencies } = resolveDependencyLists(config);
+  const installResult = installDependencies({
+    projectPath,
+    packageManager: config.packageManager,
+    dependencies,
+    devDependencies,
+    runCommand,
+    logger,
+    skipInstall,
+  });
+  warnings.push(...installResult.warnings);
+
+  let gitResult = { gitInitialized: false, warnings: [] };
+  if (config.initGit) {
+    logger.log("\n Initializing Git repository...");
+    gitResult = initializeGitRepository({
+      projectPath,
+      runCommand,
+      logger,
+      skipGit,
+    });
+    warnings.push(...gitResult.warnings);
+  }
+
+  return {
+    projectPath,
+    config,
+    dependencies,
+    devDependencies,
+    installSucceeded: installResult.installSucceeded,
+    gitInitialized: gitResult.gitInitialized,
+    warnings,
+  };
+};
+
+const createQuestioner = () => {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return {
+    ask(prompt) {
+      return new Promise((resolve) => rl.question(prompt, resolve));
+    },
+    close() {
+      rl.close();
+    },
+  };
+};
+
+export const runCli = async ({
+  argv = process.argv,
+  cwd = process.cwd(),
+  logger = console,
+  questioner = createQuestioner(),
+} = {}) => {
+
+  try {
+    let projectName = argv[2];
+    if (!projectName) {
+      projectName = await questioner.ask("\n> Project Directory Name (e.g. my-awesome-api): ");
+    }
+
+    if (!projectName?.trim()) {
+      throw new Error("Project directory name is required.");
+    }
+
+    let packageJsonName = await questioner.ask(`> package.json name (${projectName}): `);
+    if (!packageJsonName.trim()) {
+      packageJsonName = projectName;
+    }
+
+    const description = await questioner.ask("> Project description: ");
+    const author = await questioner.ask("> Author name: ");
+
+    logger.log("\n--- Select Dependencies ---");
+    logger.log('Press Enter for Yes (Y), type "n" for No.\n');
+
+    const deps = {
+      express: true,
+      mongoose: parseYesNo(await questioner.ask("Include Mongoose (MongoDB)? [Y/n] ")),
+      cors: parseYesNo(await questioner.ask("Include CORS? [Y/n] ")),
+      helmet: parseYesNo(await questioner.ask("Include Helmet (Security headers)? [Y/n] ")),
+      "cookie-parser": parseYesNo(await questioner.ask("Include cookie-parser? [Y/n] ")),
+      "pino-http": parseYesNo(await questioner.ask("Include Pino (HTTP Logger)? [Y/n] ")),
+      "express-rate-limit": parseYesNo(
+        await questioner.ask("Include Rate Limiting? [Y/n] "),
+      ),
+      dotenv: parseYesNo(await questioner.ask("Include dotenvx (Environment variables)? [Y/n] ")),
+      prettier: parseYesNo(await questioner.ask("Include Prettier (Code formatter)? [Y/n] ")),
+    };
+
+    let installPinoPretty = false;
+    if (deps["pino-http"]) {
+      installPinoPretty = parseYesNo(
+        await questioner.ask("Include pino-pretty for clean development logs? [Y/n] "),
+      );
+    }
+
+    const packageManagerChoice = await questioner.ask(
+      "\n> Which package manager would you like to use? [npm/yarn/pnpm/bun] (default: npm): ",
+    );
+    const packageManager = normalizePackageManager(packageManagerChoice);
+
+    const initGit = parseYesNo(await questioner.ask("\n> Initialize a git repository? [Y/n] "));
+    const initDocker = parseYesNo(
+      await questioner.ask("> Include Dockerfile & docker-compose.yml? [Y/n] "),
+    );
+    const initAuth = parseYesNo(
+      await questioner.ask("> Include basic JWT Auth boilerplate? [Y/n] "),
+    );
+    const initTests = parseYesNo(
+      await questioner.ask("> Include Jest setup and boilerplate tests? [Y/n] "),
+    );
+
+    const result = createProject(
+      {
+        projectName,
+        packageJsonName,
+        description,
+        author,
+        deps,
+        installPinoPretty,
+        packageManager,
+        initGit,
+        initDocker,
+        initAuth,
+        initTests,
+      },
+      { cwd, logger },
+    );
+
+    logger.log(`\n Success! Created "${projectName}" at ${result.projectPath}`);
+
+    if (result.warnings.length > 0) {
+      logger.log("\nNotes:");
+      for (const warning of result.warnings) {
+        logger.log(`- ${warning}`);
+      }
+    }
+
+    const devCommand =
+      result.config.packageManager === "npm"
+        ? "npm run dev"
+        : `${result.config.packageManager} dev`;
+    const startCommand =
+      result.config.packageManager === "npm"
+        ? "npm start"
+        : `${result.config.packageManager} start`;
+
+    logger.log("\nInside that directory, you can run:");
+    logger.log(`\n  ${devCommand}`);
+    logger.log("    Starts the development server.");
+    logger.log(`\n  ${startCommand}`);
+    logger.log("    Starts the production server.");
+    logger.log("\nWe suggest that you begin with:");
+    logger.log(`\n  cd ${projectName}`);
+    logger.log(`  ${devCommand}\n`);
+  } finally {
+    questioner.close();
+  }
+};
+
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  runCli().catch((error) => {
+    console.error(`\n${error.message}`);
+    process.exit(1);
+  });
+}

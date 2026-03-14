@@ -1,22 +1,20 @@
-version: '3.8'
+version: "3.8"
 
 services:
   app:
     build: .
     ports:
-      - "3000:3000"
+      - "__PORT__:__PORT__"
     environment:
-      - NODE_ENV=development
-      - PORT=3000
-      - MONGODB_URI=mongodb://mongo:27017/express-api
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
+      NODE_ENV: development
+      PORT: __PORT__
+      MONGODB_URI: __MONGODB_URI__
+      CORS_ORIGIN: __CORS_ORIGIN__
     depends_on:
       - mongo
 
   mongo:
-    image: mongo:latest
+    image: mongo:7
     ports:
       - "27017:27017"
     volumes:

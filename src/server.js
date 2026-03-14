@@ -1,20 +1,18 @@
 import { app } from "#app.js";
-import connectDB from "#db/index.js";
+__DB_IMPORT__
 
-const PORT = process.env.PORT || 8000;
+const PORT = Number(process.env.PORT) || 8000;
 
-connectDB()
-    .then(() => {
-        app.listen(PORT, () => {
-            console.log(`Server is running at port : ${PORT}`);
-        });
-    })
-    .catch((err) => {
-        console.log("MONGO db connection failed !!! ", err);
+const startServer = () => {
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
     });
+};
 
-process.on("unhandledRejection", (err) => {
-    console.log("UNHANDLED REJECTION! Shutting down...");
-    console.log(err.name, err.message);
+__SERVER_STARTUP__
+
+process.on("unhandledRejection", (error) => {
+    console.error("UNHANDLED REJECTION! Shutting down...");
+    console.error(error.name, error.message);
     process.exit(1);
 });

@@ -1,20 +1,14 @@
-# Use official Node.js runtime as a parent image
-FROM node:20-alpine
+# Use a package-manager-specific runtime image
+FROM __BASE_IMAGE__
 
-# Set working directory inside the container
 WORKDIR /usr/src/app
 
-# Copy package.json and lockfile based on package manager used
 COPY package.json ./
+__PACKAGE_MANAGER_SETUP__
+RUN __INSTALL_COMMAND__
 
-# Install project dependencies
-RUN npm install --production
-
-# Bundle app source
 COPY . .
 
-# Expose port the app runs on
-EXPOSE 3000
+EXPOSE __PORT__
 
-# Command to run your app
-CMD [ "node", "src/server.js" ]
+CMD [ "__RUNTIME__", "src/server.js" ]

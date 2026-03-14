@@ -1,78 +1,34 @@
 import express from "express";
-import cors from "cors";
-import cookieParser from "cookie-parser";
-import helmet from "helmet";
-import pinoHttp from "pino-http";
-import rateLimit from "express-rate-limit";
+__CORS_IMPORT__
+__COOKIE_PARSER_IMPORT__
+__HELMET_IMPORT__
+__LOGGER_IMPORT__
+__RATE_LIMIT_IMPORT__
+import { ApiError } from "#utils/ApiError.js";
 import { errorHandler } from "#middlewares/errorHandler.middleware.js";
 
-// Import routers
+__AUTH_IMPORT__
 import healthcheckRouter from "#routes/healthcheck.routes.js";
 
 const app = express();
 
-// Security HTTP headers
-app.use(helmet());
+__HELMET_SETUP__
+__RATE_LIMIT_SETUP__
+__LOGGER_SETUP__
+__CORS_SETUP__
 
-// Rate Limiting
-const limiter = rateLimit({
-    windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // Default 15 minutes
-    limit: Number(process.env.RATE_LIMIT_MAX) || 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
-    standardHeaders: 'draft-7', // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    message: "Too many requests from this IP, please try again later"
-});
-app.use("/api", limiter); // Apply rate limiting to all API routes
-
-// Logging
-app.use(pinoHttp({
-    customLogLevel: function (req, res, err) {
-        if (res.statusCode >= 400 && res.statusCode < 500) {
-            return 'warn'
-        } else if (res.statusCode >= 500 || err) {
-            return 'error'
-        } else if (res.statusCode >= 300 && res.statusCode < 400) {
-            return 'silent'
-        }
-        return 'info'
-    },
-    // Dynamically require pino-pretty if in dev and it exists, else undefined
-    transport: process.env.NODE_ENV === "development" ? (function() {
-        try {
-            import("pino-pretty");
-            return {
-                target: 'pino-pretty',
-                options: { colorize: true }
-            };
-        } catch (e) {
-            return undefined;
-        }
-    })() : undefined
-}));
-
-// CORS setup
-if (!process.env.CORS_ORIGIN && process.env.NODE_ENV === "production") {
-    throw new Error("CORS_ORIGIN must be set");
-}
-app.use(
-    cors({
-        origin: process.env.CORS_ORIGIN || "*",
-        credentials: true, // Allow cookies with requests
-    })
-);
-
-// Payload sizes and forms
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
-app.use(express.static("public")); 
-app.use(cookieParser());
+app.use(express.static("public"));
+__COOKIE_PARSER_SETUP__
 
-// -------- API ROUTES ---------
-// Mount routers
+__AUTH_ROUTE__
 app.use("/api/v1/healthcheck", healthcheckRouter);
 
-// Global Error Handler
-// Always add this as the very last middleware
+app.use((req, res, next) => {
+    next(new ApiError(404, `Route not found: ${req.originalUrl}`));
+});
+
 app.use(errorHandler);
 
 export { app };
